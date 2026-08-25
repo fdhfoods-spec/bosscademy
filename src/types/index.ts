@@ -17,6 +17,8 @@ export interface User {
   payment_status?: 'pending' | 'verified' | 'failed';
   created_at: string;
   updated_at: string;
+  password?: string | null;
+  reset_token?: string | null;
 }
 
 export interface Course {
@@ -28,7 +30,7 @@ export interface Course {
   category: string;
   duration: string;
   mentor_id?: string; // Kept optional for backward compatibility
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Published' | 'Draft';
   created_at: string;
   updated_at: string;
 }

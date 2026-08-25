@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, AlertCircle } from 'lucide-react';
+import { GraduationCap, AlertCircle, BookOpen } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
-export default function StudentLogin() {
+export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,8 +17,14 @@ export default function StudentLogin() {
     setIsLoading(true);
 
     try {
-      await login(username, password, 'Student');
-      navigate('/student/dashboard');
+      const user = await login(username, password);
+      if (user.role === 'Mentor') {
+        navigate('/mentor/dashboard');
+      } else if (user.role === 'Admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/student/enrollment');
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred during login');
     } finally {
@@ -30,13 +36,13 @@ export default function StudentLogin() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center text-blue-600">
-          <GraduationCap size={64} />
+          <BookOpen size={64} />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Student Portal
+          BOSS Academy
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in to access your courses
+          Sign in to access your portal
         </p>
       </div>
 
@@ -53,15 +59,16 @@ export default function StudentLogin() {
             )}
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                Email / Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Email Address
               </label>
               <div className="mt-1">
                 <input
-                  id="username"
-                  name="username"
-                  type="text"
+                  id="email"
+                  name="email"
+                  type="email"
                   required
+                  placeholder="you@example.com"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -116,19 +123,9 @@ export default function StudentLogin() {
               </button>
             </div>
           </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/student/register" className="font-medium text-blue-600 hover:text-blue-500">
-                Register here
-              </Link>
-            </p>
-          </div>
-          
-          <div className="mt-6 text-xs text-gray-500 text-center border-t pt-4">
-            <p>Demo Student: student01 / 123456</p>
-          </div>
+
+
+
         </div>
       </div>
     </div>

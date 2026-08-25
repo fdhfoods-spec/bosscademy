@@ -1,20 +1,24 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import AdminLogin from './pages/admin/Login';
-import MentorLogin from './pages/mentor/Login';
+import Login from './pages/auth/Login';
 import MentorRegister from './pages/mentor/Register';
-import StudentLogin from './pages/student/Login';
 import StudentRegister from './pages/student/Register';
 import StudentPayment from './pages/student/Payment';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import type { Role } from './types';
 import DashboardLayout from './layouts/DashboardLayout';
-import Landing from './pages/Landing';
+import PublicLayout from './layouts/PublicLayout';
+import Home from './pages/public/Home';
+import Programs from './pages/public/Programs';
+import Partnerships from './pages/public/Partnerships';
+import Contact from './pages/public/Contact';
+import Trainers from './pages/public/Trainers';
 
-// Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminCourses from './pages/admin/Courses';
+import CourseContent from './pages/admin/CourseContent';
+import CoursePreview from './pages/admin/CoursePreview';
 import AdminUsers from './pages/admin/Users';
 import AdminCertificates from './pages/admin/Certificates';
 
@@ -25,7 +29,6 @@ import MentorStudents from './pages/mentor/Students';
 import MentorCertificates from './pages/mentor/Certificates';
 
 // Student Pages
-import StudentDashboard from './pages/student/Dashboard';
 import StudentEnrollment from './pages/student/Enrollment';
 import StudentCertificates from './pages/student/Certificates';
 import StudentCourseView from './pages/student/CourseView';
@@ -36,24 +39,13 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
   if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
   if (!user) {
-    return <Navigate to="/student/login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (!allowedRoles.includes(user.role)) {
-    return <div className="flex h-screen flex-col items-center justify-center">
-      <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
-      <p className="mt-2 text-gray-600">You do not have permission to access this page.</p>
-      <button 
-        onClick={() => {
-          if (user.role === 'Admin') window.location.href = '/admin/dashboard';
-          else if (user.role === 'Mentor') window.location.href = '/mentor/dashboard';
-          else window.location.href = '/student/dashboard';
-        }}
-        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
-      >
-        Go to Dashboard
-      </button>
-    </div>;
+    if (user.role === 'Admin') return <Navigate to="/admin/dashboard" replace />;
+    if (user.role === 'Mentor') return <Navigate to="/mentor/dashboard" replace />;
+    return <Navigate to="/student/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -64,12 +56,19 @@ function AppRoutes() {
   
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Navigate to="/student/login" replace />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/mentor/login" element={<MentorLogin />} />
+      {/* Public Pages */}
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/programs" element={<Programs />} />
+        <Route path="/partnerships" element={<Partnerships />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/trainers" element={<Trainers />} />
+      </Route>
+      <Route path="/login" element={<Login />} />
+      <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+      <Route path="/mentor/login" element={<Navigate to="/login" replace />} />
+      <Route path="/student/login" element={<Navigate to="/login" replace />} />
       <Route path="/mentor/register" element={<MentorRegister />} />
-      <Route path="/student/login" element={<StudentLogin />} />
       <Route path="/student/register" element={<StudentRegister />} />
       <Route path="/student/payment" element={<StudentPayment />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -83,6 +82,8 @@ function AppRoutes() {
       }>
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="courses" element={<AdminCourses />} />
+        <Route path="courses/:id/content" element={<CourseContent />} />
+        <Route path="courses/:id/preview" element={<CoursePreview />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="certificates" element={<AdminCertificates />} />
       </Route>
@@ -99,13 +100,11 @@ function AppRoutes() {
         <Route path="certificates" element={<MentorCertificates />} />
       </Route>
 
-      {/* Student Routes */}
       <Route path="/student" element={
         <ProtectedRoute allowedRoles={['Student']}>
           <DashboardLayout />
         </ProtectedRoute>
       }>
-        <Route path="dashboard" element={<StudentDashboard />} />
         <Route path="enrollment" element={<StudentEnrollment />} />
         <Route path="certificates" element={<StudentCertificates />} />
       </Route>

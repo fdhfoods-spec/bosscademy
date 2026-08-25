@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 112" width="320" height="112" role="img" aria-labelledby="title desc">
+  <title id="title">BOSS Global Academy of Technology</title>
+  <desc id="desc">BOSS wordmark in primary blue with unified underline.</desc>
+  <rect width="320" height="112" fill="#ffffff"/>
+  <text x="22" y="52" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="40" font-weight="800" letter-spacing="-0.065em" fill="#2563EB">BOSS</text>
+  <rect x="22" y="60" width="248" height="3" rx="1.5" fill="#2563EB"/>
+  <text x="22" y="94" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" font-weight="600" letter-spacing="-0.02em" fill="#475569">Global Academy of Technology</text>
+</svg>

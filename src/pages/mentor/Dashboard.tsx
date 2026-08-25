@@ -4,6 +4,7 @@ import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import type { Course } from '../../types';
+import { getMockCourses, getMockEnrollments } from '../../lib/mockData';
 
 interface MentorDashboardData {
   myCourses: number;
@@ -11,6 +12,7 @@ interface MentorDashboardData {
   completedStudents: number;
   recentEnrollments: any[];
   handlingCourses: Course[];
+  totalCertificates: number;
 }
 
 export default function MentorDashboard() {
@@ -30,10 +32,10 @@ export default function MentorDashboard() {
       
       try {
         if (IS_MOCK_SUPABASE) {
-          const allCourses: Course[] = JSON.parse(localStorage.getItem('mock_courses') || '[]');
+          const allCourses = getMockCourses();
           const mentorCourses = allCourses.filter(c => (user.assigned_courses || []).includes(c.id));
           
-          const allEnrollments: any[] = JSON.parse(localStorage.getItem('mock_enrollments') || '[]');
+          const allEnrollments = getMockEnrollments();
           const courseIds = mentorCourses.map(c => c.id);
           
           const mentorEnrollments = allEnrollments.filter(e => courseIds.includes(e.course_id));
@@ -44,8 +46,9 @@ export default function MentorDashboard() {
             myCourses: mentorCourses.length,
             totalStudents: uniqueStudentIds.size,
             completedStudents: completedCount,
-            recentEnrollments: mentorEnrollments.slice(0, 5), // Not fully mock-populated with names, but sufficient
-            handlingCourses: mentorCourses
+            recentEnrollments: mentorEnrollments.slice(0, 5), 
+            handlingCourses: mentorCourses,
+            totalCertificates: completedCount // Assuming 1 certificate per completed course
           });
           
           setIsLoading(false);
@@ -84,8 +87,9 @@ export default function MentorDashboard() {
           myCourses: courseIds.length,
           totalStudents: uniqueStudentIds.size,
           completedStudents: completedCount,
-          recentEnrollments: enrollments.slice(0, 5), // Top 5 recent
-          handlingCourses: courses
+          recentEnrollments: enrollments.slice(0, 5),
+          handlingCourses: courses,
+          totalCertificates: completedCount
         });
       } catch (error) {
         console.error('Error fetching mentor data:', error);
@@ -101,6 +105,7 @@ export default function MentorDashboard() {
     { label: 'My Courses', value: data.myCourses, icon: <BookOpen className="text-blue-500" size={24} />, bgColor: 'bg-blue-50' },
     { label: 'Total Students', value: data.totalStudents, icon: <Users className="text-green-500" size={24} />, bgColor: 'bg-green-50' },
     { label: 'Completed Students', value: data.completedStudents, icon: <CheckCircle className="text-purple-500" size={24} />, bgColor: 'bg-purple-50' },
+    { label: 'Certificates Issued', value: data.totalCertificates, icon: <CheckCircle className="text-yellow-500" size={24} />, bgColor: 'bg-yellow-50' },
   ];
 
   if (isLoading) {
@@ -122,7 +127,7 @@ export default function MentorDashboard() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
           <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center space-x-4">
             <div className={`p-4 rounded-full ${stat.bgColor}`}>
@@ -183,25 +188,36 @@ export default function MentorDashboard() {
           {data.recentEnrollments.length === 0 ? (
             <div className="text-gray-500 text-sm text-center py-8">No students have enrolled in your courses yet.</div>
           ) : (
-            <ul className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
               {data.recentEnrollments.map((enr: any) => {
                 const course = data.handlingCourses.find(c => c.id === enr.course_id);
                 return (
-                  <li key={enr.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{enr.profiles?.name || 'Student'}</p>
-                      <p className="text-xs text-gray-500 mt-1">Course: <span className="font-medium text-blue-600">{course?.title || enr.courses?.title || 'Unknown Course'}</span></p>
+                  <div key={enr.id} className="p-4 hover:bg-gray-50 transition-colors flex justify-between items-center">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-10 w-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          <span className="font-bold">{enr.profiles?.name || 'Student'}</span> enrolled in
+                        </p>
+                        <p className="text-sm text-blue-600 font-medium">
+                          {course?.title || enr.courses?.title || 'Unknown Course'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(enr.enrolled_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <span className={`px-2 py-1 text-xs rounded-md ${enr.progress === 100 ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      <span className={`px-2.5 py-1 text-xs rounded-full font-medium ${enr.progress === 100 ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                         {enr.progress || 0}% Done
                       </span>
-                      <p className="text-xs text-gray-400 mt-2">{new Date(enr.enrolled_at).toLocaleDateString()}</p>
                     </div>
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
       </div>

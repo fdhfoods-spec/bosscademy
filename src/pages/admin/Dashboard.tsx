@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, BookOpen, Award, TrendingUp, Loader2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { getMockCourses, getMockUsers, getMockEnrollments } from '../../lib/mockData';
 
 interface DashboardData {
   totalCourses: number;
@@ -25,6 +26,42 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
+        if (IS_MOCK_SUPABASE) {
+          const allCourses = getMockCourses();
+          const allUsers = getMockUsers();
+          const allEnrollments = getMockEnrollments();
+          const allCertificates = JSON.parse(localStorage.getItem('mock_certificates') || '[]');
+
+          // Sort users by created_at descending and get top 5
+          const sortedUsers = [...allUsers].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          
+          // Map enrollments to include profile and course names
+          const enrichedEnrollments = [...allEnrollments].sort((a, b) => 
+            new Date(b.enrolled_at).getTime() - new Date(a.enrolled_at).getTime()
+          ).map(enrollment => {
+            const user = allUsers.find(u => u.id === enrollment.student_id);
+            const course = allCourses.find(c => c.id === enrollment.course_id);
+            return {
+              ...enrollment,
+              profiles: { name: user?.name || 'Unknown Student' },
+              courses: { title: course?.title || 'Unknown Course' }
+            };
+          });
+
+          setData({
+            totalCourses: allCourses.length,
+            totalUsers: allUsers.length,
+            totalEnrollments: allEnrollments.length,
+            totalCertificates: allCertificates.length,
+            recentUsers: sortedUsers.slice(0, 5),
+            recentEnrollments: enrichedEnrollments.slice(0, 5)
+          });
+          setIsLoading(false);
+          return;
+        }
+
         // Fetch counts in parallel
         const [
           { count: coursesCount },
@@ -98,39 +135,54 @@ export default function AdminDashboard() {
           <div className="p-6 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-900">Recent Users</h2>
           </div>
-          {data.recentUsers.length === 0 ? (
-            <div className="text-gray-500 text-sm text-center py-8">No recent users found.</div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {data.recentUsers.map((user: any) => (
-                <li key={user.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+          <div className="divide-y divide-gray-100">
+            {data.recentUsers.map((user: any) => (
+              <div key={user.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                    {user.name.charAt(0)}
+                  </div>
                   <div>
                     <p className="text-sm font-medium text-gray-900">{user.name}</p>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
-                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md">{user.role}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                  user.role === 'Mentor' ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'
+                }`}>
+                  {user.role}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-900">Recent Enrollments</h2>
           </div>
-          {data.recentEnrollments.length === 0 ? (
-            <div className="text-gray-500 text-sm text-center py-8">No recent enrollments found.</div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {data.recentEnrollments.map((enr: any) => (
-                <li key={enr.id} className="p-4 hover:bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">{enr.profiles?.name || 'Unknown Student'}</p>
-                  <p className="text-xs text-gray-500 mt-1">Enrolled in <span className="font-medium text-blue-600">{enr.courses?.title || 'Unknown Course'}</span></p>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="divide-y divide-gray-100">
+            {data.recentEnrollments.map((enrollment: any) => (
+              <div key={enrollment.id} className="p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                    <TrendingUp size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      <span className="font-bold">{enrollment.profiles?.name}</span> enrolled in
+                    </p>
+                    <p className="text-sm text-blue-600 font-medium">
+                      {enrollment.courses?.title}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(enrollment.enrolled_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

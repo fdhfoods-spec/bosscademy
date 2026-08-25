@@ -21,19 +21,18 @@ export default function ForgotPassword() {
         // Mock Forgot Password Logic
         const mockUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
         
-        // Ensure email exists in our mock data or defaults
-        const userExists = mockUsers.find((u: any) => u.email === email) || 
-                          ['admin@example.com', 'mentor@example.com', 'student01@example.com'].includes(email);
+        const userIndex = mockUsers.findIndex((u: any) => u.email?.toLowerCase().trim() === email.toLowerCase().trim());
                           
-        if (!userExists) {
+        if (userIndex === -1) {
           throw new Error('No account found with that email address.');
         }
 
         // Generate mock token
         const token = crypto.randomUUID();
-        localStorage.setItem('mock_reset_token', token);
-        localStorage.setItem('mock_reset_email', email);
+        mockUsers[userIndex].reset_token = token;
+        localStorage.setItem('mock_users', JSON.stringify(mockUsers));
         
+        // For development/testing purposes, store the token separately to show it in the UI
         setMockToken(token);
         setSuccess(true);
         setIsLoading(false);

@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Loader2, X, ChevronDown, ChevronRight, Video, Upload, Edit, Trash, PlayCircle, Folder, ArrowLeft } from 'lucide-react';
+import { Search, Plus, Loader2, X, ChevronDown, ChevronRight, Video, Upload, Edit, Trash, PlayCircle, Folder, ArrowLeft, FileText, Monitor, Eye } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { saveFile } from '../../lib/storage';
+import LocalMediaRenderer from '../../components/LocalMediaRenderer';
 import type { Course, Module, Lesson } from '../../types';
+import { getMockCourses } from '../../lib/mockData';
 
 export default function MentorCourses() {
   const { user } = useAuth();
@@ -33,6 +36,10 @@ export default function MentorCourses() {
   const [uploadProgress, setUploadProgress] = useState(-1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Preview Modal
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewActiveLesson, setPreviewActiveLesson] = useState<Lesson | null>(null);
+
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
@@ -47,15 +54,9 @@ export default function MentorCourses() {
     setIsLoading(true);
 
     if (IS_MOCK_SUPABASE) {
-      const stored = localStorage.getItem('mock_courses');
-      if (stored) {
-        // Filter by assigned courses
-        const allCourses: Course[] = JSON.parse(stored);
-        const assignedIds = user.assigned_courses || [];
-        setCourses(allCourses.filter(c => assignedIds.includes(c.id)));
-      } else {
-        setCourses([]);
-      }
+      const allCourses = getMockCourses();
+      const assignedIds = user.assigned_courses || [];
+      setCourses(allCourses.filter(c => assignedIds.includes(c.id)));
       setIsLoading(false);
       return;
     }
@@ -223,31 +224,34 @@ export default function MentorCourses() {
 
     // Simulate upload progress
     const simulateProgress = () => {
-      return new Promise<string>((resolve) => {
+      return new Promise<void>((resolve) => {
         let progress = 0;
         const interval = setInterval(() => {
           progress += 20;
           setUploadProgress(progress);
           if (progress >= 100) {
             clearInterval(interval);
-            // In a real app, this would be the Supabase Storage public URL
-            // Here, we generate a mock local object URL for demonstration
-            resolve(URL.createObjectURL(file));
+            resolve();
           }
         }, 300);
       });
     };
 
     try {
-      const mockVideoUrl = await simulateProgress();
+      await simulateProgress();
+
+      const newId = crypto.randomUUID();
+      
+      // Save actual file to IndexedDB for persistent storage
+      await saveFile(newId, file);
 
       const moduleLessons = lessons.filter(l => l.module_id === targetModuleId);
       const lessonToInsert = {
-        id: crypto.randomUUID(),
+        id: newId,
         module_id: targetModuleId,
         title: newVideo.title || file.name,
         description: newVideo.description,
-        video_url: mockVideoUrl,
+        video_url: '', // Local Media Renderer handles fetching from IndexedDB
         duration: '10:00', // Mock duration
         sort_order: moduleLessons.length,
         created_at: new Date().toISOString(),
@@ -398,8 +402,19 @@ export default function MentorCourses() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
+                          onClick={async () => { 
+                            if (user?.role !== 'Mentor') return;
+                            setSelectedCourse(course); 
+                            await fetchCourseContent(course.id);
+                            setIsPreviewModalOpen(true);
+                          }}
+                          className="bg-orange-50 text-orange-600 hover:bg-orange-100 px-3 py-1.5 rounded-md transition-colors mr-2 inline-flex items-center"
+                        >
+                          <Eye size={16} className="mr-1" /> Preview
+                        </button>
+                        <button
                           onClick={() => { setSelectedCourse(course); setViewMode('builder'); }}
-                          className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-md transition-colors"
+                          className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-1.5 rounded-md transition-colors inline-flex items-center"
                         >
                           Manage Content
                         </button>
@@ -571,157 +586,7 @@ export default function MentorCourses() {
       {/* MODALS */}
       {/* ----------------------------------------------------- */}
 
-      {/* Add Course Modal */}
-      {isCreateCourseModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">Create New Course</h2>
-              <button onClick={() => setIsCreateCourseModalOpen(false)} className="text-gray-400 hover:text-gray-600" disabled={isUpdating}>
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleCreateCourse} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course Title *</label>
-                <input
-                  type="text" required
-                  value={newCourse.title}
-                  onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  disabled={isUpdating}
-                  placeholder="e.g. Master Full Stack Web Development"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={newCourse.description}
-                  onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 h-24 resize-none"
-                  disabled={isUpdating}
-                  placeholder="Provide a brief overview of what students will learn..."
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course Thumbnail (Optional)</label>
-                <div className="flex items-center space-x-4">
-                  {newCourse.thumbnail ? (
-                    <div className="relative w-24 h-16 rounded-md overflow-hidden border border-gray-200">
-                      <img src={newCourse.thumbnail} alt="Thumbnail preview" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setNewCourse({ ...newCourse, thumbnail: '' })}
-                        className="absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:text-red-700 shadow-sm"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-24 h-16 bg-gray-100 rounded-md border border-dashed border-gray-300 flex items-center justify-center text-gray-400">
-                      <Folder size={20} />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setNewCourse({ ...newCourse, thumbnail: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
-                    value={newCourse.category}
-                    onChange={(e) => setNewCourse({ ...newCourse, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    disabled={isUpdating}
-                  >
-                    <option value="Development">Development</option>
-                    <option value="Business">Business</option>
-                    <option value="IT & Software">IT & Software</option>
-                    <option value="Design">Design</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Optional)</label>
-                  <input
-                    type="text"
-                    value={newCourse.duration}
-                    onChange={(e) => setNewCourse({ ...newCourse, duration: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    disabled={isUpdating}
-                    placeholder="e.g. 10 hours"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">give it</label>
-                <div className="flex items-center space-x-4">
-                  {newCourse.video_url ? (
-                    <div className="relative w-24 h-16 rounded-md overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
-                      <span className="text-xs text-gray-500 truncate px-2">Video Selected</span>
-                      <button
-                        type="button"
-                        onClick={() => setNewCourse({ ...newCourse, video_url: '' })}
-                        className="absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:text-red-700 shadow-sm"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-24 h-16 bg-gray-100 rounded-md border border-dashed border-gray-300 flex items-center justify-center text-gray-400">
-                      <Folder size={20} />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setNewCourse({ ...newCourse, video_url: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="pt-4 flex justify-end space-x-3">
-                <button type="button" onClick={() => setIsCreateCourseModalOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50" disabled={isUpdating}>
-                  Cancel
-                </button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center font-medium" disabled={isUpdating}>
-                  {isUpdating && <Loader2 size={16} className="mr-2 animate-spin" />}
-                  Create Course
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Add Module Modal */}
       {isCreateModuleModalOpen && (
@@ -820,6 +685,138 @@ export default function MentorCourses() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Course Preview Modal */}
+      {isPreviewModalOpen && selectedCourse && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex flex-col p-4 sm:p-6 lg:p-8 overflow-hidden">
+          <div className="bg-white flex-1 rounded-xl shadow-2xl flex flex-col overflow-hidden max-w-7xl mx-auto w-full">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setIsPreviewModalOpen(false)}
+                  className="flex items-center text-gray-500 hover:text-orange-500 transition-colors font-bold text-sm uppercase tracking-wider"
+                >
+                  <ArrowLeft size={16} className="mr-2" />
+                  Close Preview
+                </button>
+                <div className="h-4 w-px bg-gray-300"></div>
+                <h2 className="font-extrabold text-black uppercase">{selectedCourse.title}</h2>
+              </div>
+              <div className="bg-orange-100 text-orange-600 border border-orange-200 px-4 py-1.5 rounded text-xs font-black uppercase tracking-wider">
+                Mentor Preview
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
+              
+              {/* Left Column: Media Player */}
+              <div className="lg:col-span-2 bg-gray-50 p-6 flex flex-col overflow-y-auto border-r border-gray-200">
+                {previewActiveLesson ? (
+                  <>
+                    <div className="w-full aspect-video bg-gray-900 rounded-lg flex items-center justify-center shadow-md border border-gray-200 overflow-hidden relative mb-4">
+                      {previewActiveLesson.video_url || IS_MOCK_SUPABASE ? (
+                        <div className="w-full h-full">
+                          <LocalMediaRenderer id={previewActiveLesson.id} type={previewActiveLesson.title.toLowerCase().includes('pdf') ? 'PDF' : previewActiveLesson.title.toLowerCase().includes('ppt') ? 'PPT' : 'VIDEO'} fallbackUrl={previewActiveLesson.video_url || undefined} />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-gray-500">
+                          {previewActiveLesson.title.toLowerCase().includes('pdf') ? (
+                            <FileText size={64} className="mb-2" />
+                          ) : previewActiveLesson.title.toLowerCase().includes('ppt') || previewActiveLesson.title.toLowerCase().includes('presentation') ? (
+                            <Monitor size={64} className="mb-2" />
+                          ) : (
+                            <PlayCircle size={64} className="mb-2" />
+                          )}
+                          <span className="text-sm uppercase tracking-wider font-bold">No Media File Uploaded</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+                      <div className="inline-block bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded mb-3 uppercase tracking-wider">
+                        {previewActiveLesson.title.toLowerCase().includes('pdf') ? 'PDF' 
+                          : previewActiveLesson.title.toLowerCase().includes('ppt') ? 'PPT' 
+                          : 'VIDEO'}
+                      </div>
+                      <h2 className="text-2xl font-extrabold text-black uppercase tracking-wide">
+                        {previewActiveLesson.title}
+                      </h2>
+                      {previewActiveLesson.description && (
+                        <p className="text-gray-600 mt-2 text-sm">{previewActiveLesson.description}</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full">
+                    <Folder size={48} className="mb-4 text-gray-300" />
+                    <p className="text-sm font-bold uppercase tracking-wider text-gray-400">Select a lesson from the curriculum</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Course Curriculum */}
+              <div className="lg:col-span-1 bg-white flex flex-col overflow-hidden">
+                <div className="p-5 border-b border-gray-200 bg-gray-50/50">
+                  <h3 className="text-lg font-black text-black uppercase tracking-wider">Course Curriculum</h3>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {modules.length > 0 ? modules.map((module, mIndex) => {
+                    const moduleLessons = lessons.filter(l => l.module_id === module.id);
+                    return (
+                      <div key={module.id} className="space-y-2">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Chapter {mIndex + 1}: {module.title}</h4>
+                        {moduleLessons.length > 0 ? moduleLessons.map((lesson, lIndex) => {
+                          const isPdf = lesson.title.toLowerCase().includes('pdf');
+                          const isPpt = lesson.title.toLowerCase().includes('ppt');
+                          const isVideo = !isPdf && !isPpt;
+                          
+                          return (
+                            <button
+                              key={lesson.id}
+                              onClick={() => setPreviewActiveLesson(lesson)}
+                              className={`w-full text-left p-3 rounded-md border transition-all ${
+                                previewActiveLesson?.id === lesson.id 
+                                  ? 'bg-orange-50 border-orange-500 shadow-sm' 
+                                  : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="mt-0.5">
+                                  {isPdf && <FileText size={16} className={previewActiveLesson?.id === lesson.id ? 'text-orange-500' : 'text-gray-400'} />}
+                                  {isVideo && <PlayCircle size={16} className={previewActiveLesson?.id === lesson.id ? 'text-orange-500' : 'text-gray-400'} />}
+                                  {isPpt && <Monitor size={16} className={previewActiveLesson?.id === lesson.id ? 'text-orange-500' : 'text-gray-400'} />}
+                                </div>
+                                <div>
+                                  <h4 className={`text-sm font-bold leading-snug mb-1 ${previewActiveLesson?.id === lesson.id ? 'text-orange-700' : 'text-black'}`}>
+                                    {lIndex + 1}. {lesson.title}
+                                  </h4>
+                                  <p className={`text-[10px] uppercase font-bold tracking-wider ${previewActiveLesson?.id === lesson.id ? 'text-orange-600' : 'text-gray-500'}`}>
+                                    {isPdf ? 'PDF' : isPpt ? 'PPT' : 'VIDEO'} {lesson.duration && `• ${lesson.duration}`}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        }) : (
+                          <div className="text-xs text-gray-400 italic p-2 border border-dashed border-gray-200 rounded">No content in this chapter</div>
+                        )}
+                      </div>
+                    );
+                  }) : (
+                    <div className="text-center py-8 text-sm text-gray-500 italic">
+                      No curriculum available for this course yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

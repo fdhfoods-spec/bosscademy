@@ -16,7 +16,7 @@ export default function Sidebar({ role, isOpen, setIsOpen }: SidebarProps) {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
+    navigate('/login');
   };
 
   const adminLinks = [
@@ -34,7 +34,6 @@ export default function Sidebar({ role, isOpen, setIsOpen }: SidebarProps) {
   ];
 
   const studentLinks = [
-    { to: '/student/dashboard', icon: <Home size={20} />, label: 'Dashboard' },
     { to: '/student/enrollment', icon: <BookOpen size={20} />, label: 'Enrollment' },
     { to: '/student/certificates', icon: <Award size={20} />, label: 'Certificates' },
   ];
@@ -93,8 +92,6 @@ export default function Sidebar({ role, isOpen, setIsOpen }: SidebarProps) {
         {role === 'Mentor' && user && (
           <div className="mb-4 p-3 bg-gray-800 rounded-lg">
             <p className="text-sm font-semibold text-white truncate">{user.name}</p>
-            <p className="text-xs text-gray-400 mt-1 truncate">Dept: {user.department || 'N/A'}</p>
-            <p className="text-xs text-blue-400 mt-0.5 truncate">Course: {user.course || 'N/A'}</p>
           </div>
         )}
         <button

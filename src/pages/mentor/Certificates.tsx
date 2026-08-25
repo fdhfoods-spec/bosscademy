@@ -22,7 +22,7 @@ export default function MentorCertificates() {
       if (IS_MOCK_SUPABASE) {
         // Fetch all mock data
         const allCourses = JSON.parse(localStorage.getItem('mock_courses') || '[]');
-        const mentorCourses = allCourses.filter((c: any) => c.mentor_id === user.id);
+        const mentorCourses = allCourses.filter((c: any) => (user.assigned_courses || []).includes(c.id));
         const courseIds = mentorCourses.map((c: any) => c.id);
 
         const allEnrollments = JSON.parse(localStorage.getItem('mock_enrollments') || '[]');
@@ -37,11 +37,11 @@ export default function MentorCertificates() {
         const mockUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
         
         const mappedStudents = eligible.map((e: any) => {
-          const studentProfile = mockUsers.find((u: any) => u.id === e.student_id) || { name: 'Unknown Student' };
+          const studentProfile = mockUsers.find((u: any) => u.id === e.student_id) || { name: 'Unknown Student', email: 'unknown@example.com' };
           const courseData = mentorCourses.find((c: any) => c.id === e.course_id) || { title: 'Unknown Course' };
           return {
             ...e,
-            profiles: { name: studentProfile.name },
+            profiles: { name: studentProfile.name, email: studentProfile.email },
             courses: { title: courseData.title }
           };
         });
@@ -58,7 +58,7 @@ export default function MentorCertificates() {
       if (courseIds.length > 0) {
         const { data } = await supabase
           .from('enrollments')
-          .select('id, student_id, course_id, status, progress, completed_at, certificate_status, profiles(name), courses(title)')
+          .select('id, student_id, course_id, status, progress, completed_at, certificate_status, profiles(name, email), courses(title)')
           .in('course_id', courseIds)
           .eq('progress', 100);
           
@@ -77,6 +77,8 @@ export default function MentorCertificates() {
     setIsUpdating(enrollmentId);
     
     try {
+      const targetStudent = students.find(s => s.id === enrollmentId);
+      
       if (IS_MOCK_SUPABASE) {
         const allEnrollments = JSON.parse(localStorage.getItem('mock_enrollments') || '[]');
         const updated = allEnrollments.map((e: any) => {
@@ -86,6 +88,24 @@ export default function MentorCertificates() {
           return e;
         });
         localStorage.setItem('mock_enrollments', JSON.stringify(updated));
+        
+        if (action === 'approved' && targetStudent) {
+          const mockCerts = JSON.parse(localStorage.getItem('mock_certificates') || '[]');
+          const randomId = Math.random().toString(16).substring(2, 6).toUpperCase();
+          const newCert = {
+            id: crypto.randomUUID(),
+            certificate_id: `CERT-CO-${randomId}-NEW`,
+            recipient_name: targetStudent.profiles?.name || 'Unknown Student',
+            recipient_email: targetStudent.profiles?.email || 'student@example.com',
+            type: 'COURSE',
+            program: targetStudent.courses?.title || 'Unknown Course',
+            verification_status: 'valid',
+            issued_at: new Date().toISOString(),
+            student_id: targetStudent.student_id,
+            course_id: targetStudent.course_id
+          };
+          localStorage.setItem('mock_certificates', JSON.stringify([newCert, ...mockCerts]));
+        }
         
         // Update local state
         setStudents(students.map(s => s.id === enrollmentId ? { ...s, certificate_status: action } : s));
@@ -98,6 +118,21 @@ export default function MentorCertificates() {
         .from('enrollments')
         .update({ certificate_status: action })
         .eq('id', enrollmentId);
+        
+      if (action === 'approved' && targetStudent) {
+        const randomId = Math.random().toString(16).substring(2, 6).toUpperCase();
+        const newCert = {
+          certificate_id: `CERT-CO-${randomId}-NEW`,
+          recipient_name: targetStudent.profiles?.name || 'Unknown Student',
+          recipient_email: targetStudent.profiles?.email || 'student@example.com',
+          type: 'COURSE',
+          program: targetStudent.courses?.title || 'Unknown Course',
+          verification_status: 'valid',
+          student_id: targetStudent.student_id,
+          course_id: targetStudent.course_id
+        };
+        await supabase.from('certificates').insert([newCert]);
+      }
         
       setStudents(students.map(s => s.id === enrollmentId ? { ...s, certificate_status: action } : s));
     } catch (error) {

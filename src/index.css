@@ -1,8 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(222.2 84% 4.9%);
-  --color-primary: hsl(221.2 83.2% 53.3%);
-  --color-primary-foreground: hsl(210 40% 98%);
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563EB;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+  --color-primary: #2563EB;
+
+  --color-accent-50: #fff7ed;
+  --color-accent-100: #ffedd5;
+  --color-accent-400: #fb923c;
+  --color-accent-500: #F97316;
+  --color-accent-600: #ea580c;
+  --color-accent-700: #c2410c;
+
+  --color-cta-50: #fff7ed;
+  --color-cta-100: #ffedd5;
+  --color-cta-400: #fb923c;
+  --color-cta-500: #F97316;
+  --color-cta-600: #ea580c;
+  --color-cta-700: #c2410c;
+
+  --color-surface: #F8FAFC;
+  --color-surface-subtle: #f1f5f9;
+
+  --color-background: #F8FAFC;
+  --color-background-light: #ffffff;
+  --color-background-dark: #F8FAFC;
+
+  --color-text: #0f172a;
+  --color-text-light: #475569;
+  --color-text-muted: #64748b;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-heading: "Poppins", "Inter", sans-serif;
+
+  --radius-card: 12px;
+}
+
+@layer base {
+  :root {
+    --color-primary: #2563eb;
+    --color-accent: #f97316;
+    --color-surface: #f8fafc;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-tight text-slate-900;
+  }
+
+  body {
+    @apply font-sans text-text bg-surface antialiased;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  /** Primary CTA: orange, conversion */
+  .btn-cta {
+    @apply inline-flex items-center justify-center rounded-card bg-accent-500 text-white font-semibold;
+    @apply shadow-md shadow-accent-500/25;
+    @apply hover:bg-accent-600 hover:shadow-lg hover:shadow-accent-600/30 hover:-translate-y-0.5;
+    @apply active:translate-y-0 active:scale-[0.99] transition-all duration-200;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+  }
+
+  /** Secondary: blue outline (on light backgrounds) */
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-card border-2 border-primary-600 bg-white text-primary-600 font-semibold;
+    @apply hover:bg-primary-50 hover:border-primary-700 hover:text-primary-700 hover:-translate-y-0.5;
+    @apply active:translate-y-0 active:scale-[0.99] transition-all duration-200;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+  }
+
+  /** Secondary on dark / hero CTA row alternative */
+  .btn-cta-outline-light {
+    @apply inline-flex items-center justify-center rounded-card border-2 border-white/90 text-white font-semibold bg-transparent;
+    @apply hover:bg-white/10 hover:border-white hover:-translate-y-0.5;
+    @apply active:translate-y-0 active:scale-[0.99] transition-all duration-200;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white;
+  }
+
+  /** Navbar CTA */
+  .btn-cta-nav {
+    @apply inline-flex items-center justify-center rounded-card text-sm font-semibold text-white bg-accent-500 px-4 py-2;
+    @apply shadow-sm shadow-accent-500/20 hover:bg-accent-600 hover:shadow-md hover:-translate-y-px;
+    @apply active:translate-y-0 transition-all duration-200;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+  }
+
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-2;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-card border border-slate-300 bg-white text-slate-900;
+    @apply placeholder:text-slate-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-600/25 focus:border-primary-600 transition-shadow;
+  }
+
+  .card-elevated {
+    @apply rounded-card border border-slate-200/90 bg-white shadow-sm;
+    @apply hover:shadow-md hover:border-primary-200/80 transition-all duration-300;
+  }
 }

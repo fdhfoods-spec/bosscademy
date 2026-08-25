@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Award, Search, X, Loader2, CheckCircle } from 'lucide-react';
+import { Upload, Award, Search, X, Loader2, CheckCircle, Download } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import type { Certificate } from '../../types';
+import CertificateModal from '../../components/CertificateModal';
 
 export default function AdminCertificates() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -12,7 +13,7 @@ export default function AdminCertificates() {
   const [newCert, setNewCert] = useState({ recipientName: '', recipientEmail: '', type: 'PROJECT', program: '' });
 
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
-  const [verifyingCertId, setVerifyingCertId] = useState<string | null>(null);
+  const [verifyingCert, setVerifyingCert] = useState<Certificate | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCertificates = async () => {
@@ -102,8 +103,19 @@ export default function AdminCertificates() {
     setSelectedCert(cert);
   };
 
-  const handleVerify = (certId: string) => {
-    setVerifyingCertId(certId);
+  const handleVerify = (cert: Certificate) => {
+    setVerifyingCert(cert);
+  };
+
+  const handleDownloadCertificate = (cert: Certificate) => {
+    // To properly "download" the visual certificate, we open the view modal and trigger print
+    setSelectedCert(cert);
+    setVerifyingCert(null);
+    
+    // Add a slight delay to allow the modal to render before printing
+    setTimeout(() => {
+      window.print();
+    }, 500);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,7 +277,7 @@ export default function AdminCertificates() {
                       <button onClick={() => handleView(cert)} className="text-blue-600 hover:text-blue-900 transition-colors">
                         View
                       </button>
-                      <button onClick={() => handleVerify(cert.certificate_id)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                      <button onClick={() => handleVerify(cert)} className="text-gray-400 hover:text-gray-600 transition-colors">
                         Verify
                       </button>
                     </td>
@@ -362,58 +374,11 @@ export default function AdminCertificates() {
         </div>
       )}
 
-      {/* View Certificate Modal */}
-      {selectedCert && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden border-8 border-gray-100 relative">
-            <div className="p-8 sm:p-12 text-center relative border-4 border-double border-gray-200 m-2">
-              <button 
-                onClick={() => setSelectedCert(null)} 
-                className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={24} />
-              </button>
-              
-              <div className="mb-8 mt-4">
-                <h1 className="text-5xl font-serif font-bold text-gray-900 tracking-wider">CERTIFICATE</h1>
-                <h2 className="text-xl text-blue-600 tracking-widest mt-3 uppercase font-semibold">OF {selectedCert.type}</h2>
-              </div>
-              
-              <p className="text-gray-500 mb-4 italic text-lg">This is proudly presented to</p>
-              
-              <h3 className="text-5xl font-serif text-gray-800 mb-6 capitalize py-2 border-b border-gray-300 inline-block px-12">{selectedCert.recipient_name}</h3>
-              
-              <p className="text-gray-600 mb-8 max-w-lg mx-auto text-lg leading-relaxed">
-                For successfully completing the <span className="font-bold text-gray-900">{selectedCert.program}</span> program on <span className="font-bold text-gray-900">{new Date(selectedCert.issued_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>.
-              </p>
-              
-              <div className="flex justify-between items-end mt-20 px-4 sm:px-12">
-                <div className="text-center">
-                  <div className="w-40 border-b-2 border-gray-800 mb-2"></div>
-                  <p className="text-sm font-bold text-gray-700 tracking-widest uppercase">Course Director</p>
-                </div>
-                
-                <div className="text-center pb-2">
-                  <div className="w-24 h-24 mx-auto mb-2 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full flex items-center justify-center border-4 border-white shadow-lg relative">
-                    <div className="absolute inset-1 border border-white/50 rounded-full"></div>
-                    <Award size={40} className="text-white" />
-                  </div>
-                </div>
-                
-                <div className="text-center">
-                  <div className="w-40 border-b-2 border-gray-800 mb-2"></div>
-                  <p className="text-sm font-bold text-gray-700 tracking-widest uppercase">Instructor</p>
-                </div>
-              </div>
-              
-              <div className="mt-16 text-left">
-                <p className="text-xs text-gray-400 font-mono">ID: {selectedCert.certificate_id}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {verifyingCertId && (
+      <CertificateModal 
+        certificate={selectedCert} 
+        onClose={() => setSelectedCert(null)} 
+      />
+      {verifyingCert && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[70]">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden">
             <div className="p-6 text-center">
@@ -421,15 +386,33 @@ export default function AdminCertificates() {
                 <CheckCircle className="text-green-600" size={32} />
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Certificate Valid</h3>
-              <p className="text-gray-500 mb-6 font-mono text-sm">
-                ID: {verifyingCertId}
+              
+              <div className="bg-gray-50 p-4 rounded-lg text-left mb-6 space-y-2 border border-gray-100 shadow-sm">
+                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Recipient:</span> <span className="font-semibold text-gray-900">{verifyingCert.recipient_name}</span></p>
+                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Program:</span> <span className="font-semibold text-gray-900">{verifyingCert.program}</span></p>
+                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Type:</span> <span className="font-semibold text-gray-900 capitalize">{verifyingCert.type.toLowerCase()}</span></p>
+                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Issued On:</span> <span className="font-semibold text-gray-900">{new Date(verifyingCert.issued_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></p>
+              </div>
+              
+              <p className="text-gray-500 mb-6 font-mono text-xs">
+                ID: {verifyingCert.certificate_id}
               </p>
-              <button 
-                onClick={() => setVerifyingCertId(null)}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-              >
-                Close
-              </button>
+              
+              <div className="flex gap-3 w-full">
+                <button 
+                  onClick={() => handleDownloadCertificate(verifyingCert)}
+                  className="w-full bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-medium py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+                <button 
+                  onClick={() => setVerifyingCert(null)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
