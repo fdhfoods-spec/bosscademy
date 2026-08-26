@@ -7,7 +7,7 @@ export default function PublicLayout() {
   return (
     <div className="min-h-screen antialiased flex flex-col">
       <Navbar />
-      <main className="flex-grow min-h-screen">
+      <main className="flex-grow">
         <Outlet />
       </main>
       <Footer />

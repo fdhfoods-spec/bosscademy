@@ -23,18 +23,18 @@ export default function Footer() {
             <h3 className="font-heading text-white font-semibold text-sm uppercase tracking-wider mb-4">Programs</h3>
             <ul className="space-y-3">
               <li>
-                <Link to="/programs/office" className={linkClass}>
-                  Office professional
+                <Link to="/programs/pcb-design" className={linkClass}>
+                  PCB Design
                 </Link>
               </li>
               <li>
-                <Link to="/programs/data" className={linkClass}>
-                  Data analytics
+                <Link to="/programs/cyber-security" className={linkClass}>
+                  Cyber Security
                 </Link>
               </li>
               <li>
-                <Link to="/programs/marketing" className={linkClass}>
-                  Digital marketing
+                <Link to="/programs/sap" className={linkClass}>
+                  SAP
                 </Link>
               </li>
               <li>
