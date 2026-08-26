@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Loader2, PlayCircle, BookOpen, Award } from 'lucide-react';
+import { Loader2, PlayCircle, BookOpen, Award, Search } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
