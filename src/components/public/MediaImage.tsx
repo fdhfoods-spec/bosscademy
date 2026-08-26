@@ -30,8 +30,7 @@ export default function MediaImage({
   className,
   imgClassName,
   sizes,
-  priority,
-  hoverZoom = false,
+    hoverZoom = false,
 }: Props) {
   const cornerClass =
     corners === 'top'
@@ -51,6 +50,7 @@ export default function MediaImage({
       <img
         src={src}
         alt={alt}
+        sizes={sizes}
         className={cn(
           'w-full h-full object-cover object-center absolute inset-0',
           hoverZoom && 'transition-transform duration-500 ease-out group-hover:scale-[1.04]',

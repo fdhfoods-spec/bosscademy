@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, AlertCircle, Loader2, CheckCircle2, Mail } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
 
 export default function ResetPassword() {
   const [email, setEmail] = useState('');
@@ -11,7 +10,6 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
   const [isValidToken, setIsValidToken] = useState<boolean | null>(null);
   
   const navigate = useNavigate();
@@ -37,7 +35,6 @@ export default function ResetPassword() {
         setError('Invalid or expired reset token.');
         setIsValidToken(false);
       } else {
-        setUserEmail(user.email || '');
         setIsValidToken(true);
       }
     } else {
@@ -47,7 +44,7 @@ export default function ResetPassword() {
         if (session) {
           setIsValidToken(true);
         } else {
-          const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
               setIsValidToken(true);
             }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Users, BookOpen, Award, TrendingUp, Loader2 } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { getMockCourses, getMockUsers, getMockEnrollments } from '../../lib/mockData';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye, UserPlus, GitMerge } from 'lucide-react';
+import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import type { Course, User as UserType } from '../../types';
 import { getMockCourses, setMockCourses, getMockUsers, setMockUsers } from '../../lib/mockData';
@@ -10,8 +10,6 @@ export default function AdminCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [newCourseTitle, setNewCourseTitle] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
   const [mentors, setMentors] = useState<{ id: string; name: string; email: string }[]>([]);
   const [allUsers, setAllUsers] = useState<UserType[]>([]);
   
@@ -28,7 +26,6 @@ export default function AdminCourses() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editCourseMentors, setEditCourseMentors] = useState<string[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Students Modal State
   const [isStudentsModalOpen, setIsStudentsModalOpen] = useState(false);
@@ -128,17 +125,14 @@ export default function AdminCourses() {
 
   const handleDeleteCourse = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this course?')) return;
-    setIsDeleting(id);
     
     if (IS_MOCK_SUPABASE) {
       const updated = courses.filter(c => c.id !== id);
       setMockCourses(updated);
       setCourses(updated);
-      setIsDeleting(null);
     } else {
       await supabase.from('courses').delete().eq('id', id);
       fetchCourses();
-      setIsDeleting(null);
     }
   };
 

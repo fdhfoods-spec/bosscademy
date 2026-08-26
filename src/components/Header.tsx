@@ -1,4 +1,4 @@
-import { Bell, Search, User, Menu } from 'lucide-react';
+import { User, Menu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Header({ setSidebarOpen }: { setSidebarOpen?: (val: boolean) => void }) {

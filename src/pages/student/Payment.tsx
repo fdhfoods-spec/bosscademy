@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2, QrCode, Clock, ArrowRight, ShieldCheck, CreditCard, Banknote } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,6 +8,8 @@ export default function Payment() {
   const { login } = useAuth();
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [tempUser, setTempUser] = useState<any>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'verified'>('pending');
 
   useEffect(() => {
     // Check if coming from registration
@@ -17,7 +19,7 @@ export default function Payment() {
     }
 
     // Polling mechanism only if there's a temp user waiting for verification
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (stored) {
       interval = setInterval(() => {
         const allUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
@@ -37,7 +39,7 @@ export default function Payment() {
 
   const handleProceedToDashboard = async () => {
     if (tempUser && paymentStatus === 'verified') {
-      await login(tempUser.email, tempUser.password, 'Student');
+      await login(tempUser.email, tempUser.password);
       localStorage.removeItem('temp_payment_user'); 
       navigate('/student/dashboard');
     }

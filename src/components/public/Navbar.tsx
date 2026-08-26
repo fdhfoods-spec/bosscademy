@@ -36,6 +36,9 @@ export default function Navbar() {
             <Link to="/contact" className={`${navLink} text-primary-600 font-semibold`}>
               Talk to Advisor
             </Link>
+            <Link to="/login" className={`${navLink} font-semibold text-slate-800`}>
+              LMS Login
+            </Link>
             <Link to="/programs" className="btn-cta-nav ml-1">
               Start Learning Now
             </Link>
@@ -87,6 +90,13 @@ export default function Navbar() {
               onClick={() => setIsOpen(false)}
             >
               Talk to Advisor
+            </Link>
+            <Link
+              to="/login"
+              className="block rounded-card px-3 py-2.5 text-base font-semibold text-slate-800 hover:bg-surface transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              LMS Login
             </Link>
             <Link
               to="/programs"

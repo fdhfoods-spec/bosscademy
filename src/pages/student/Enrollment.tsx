@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Loader2, PlayCircle, BookOpen } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, PlayCircle, BookOpen, Award } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -12,12 +12,12 @@ export default function StudentEnrollment() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
+    const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-
+  
   useEffect(() => {
     fetchCoursesAndEnrollments();
   }, [user]);
@@ -64,7 +64,7 @@ export default function StudentEnrollment() {
       student_id: user.id,
       course_id: courseId,
       enrolled_at: new Date().toISOString(),
-      status: 'active',
+      status: 'active' as 'active'|'completed',
       progress: 0
     };
 
@@ -102,7 +102,7 @@ export default function StudentEnrollment() {
         </div>
       </div>
 
-      {/* <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
@@ -113,7 +113,7 @@ export default function StudentEnrollment() {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
-      </div> */}
+      </div>
 
       {isLoading ? (
         <div className="flex justify-center items-center py-20">

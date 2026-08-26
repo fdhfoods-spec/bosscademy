@@ -1,4 +1,3 @@
-import React from 'react';
 import { Award, X } from 'lucide-react';
 import type { Certificate } from '../types';
 

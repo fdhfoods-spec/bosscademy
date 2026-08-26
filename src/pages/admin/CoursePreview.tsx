@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, PlayCircle, Monitor } from 'lucide-react';
 import { getMockCurriculum } from '../../lib/mockData';
 import type { CurriculumItem } from '../../lib/mockData';
@@ -9,9 +9,7 @@ import { getFile } from '../../lib/storage';
 export default function CoursePreview() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const course = location.state?.course;
-
+  
   const [curriculum, setCurriculum] = useState<CurriculumItem[]>([]);
   const [activeItem, setActiveItem] = useState<CurriculumItem | undefined>(undefined);
   const [fileUrl, setFileUrl] = useState<string | null>(null);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BookOpen, Users, CheckCircle, Loader2 } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,7 +22,8 @@ export default function MentorDashboard() {
     totalStudents: 0,
     completedStudents: 0,
     recentEnrollments: [],
-    handlingCourses: []
+    handlingCourses: [],
+    totalCertificates: 0
   });
   const [isLoading, setIsLoading] = useState(true);
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, Role } from '../types';
+import type { User } from '../types';
 import { supabase, IS_MOCK_SUPABASE } from '../lib/supabase';
 import { initializeMockData } from '../lib/mockData';
 

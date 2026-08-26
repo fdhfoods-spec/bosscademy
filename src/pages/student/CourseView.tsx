@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PlayCircle, ArrowLeft, Loader2, CheckCircle2, ChevronLeft, ChevronRight, FileText, Monitor, Check } from 'lucide-react';
 import { IS_MOCK_SUPABASE } from '../../lib/supabase';

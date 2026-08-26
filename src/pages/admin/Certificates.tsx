@@ -390,7 +390,7 @@ export default function AdminCertificates() {
               <div className="bg-gray-50 p-4 rounded-lg text-left mb-6 space-y-2 border border-gray-100 shadow-sm">
                 <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Recipient:</span> <span className="font-semibold text-gray-900">{verifyingCert.recipient_name}</span></p>
                 <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Program:</span> <span className="font-semibold text-gray-900">{verifyingCert.program}</span></p>
-                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Type:</span> <span className="font-semibold text-gray-900 capitalize">{verifyingCert.type.toLowerCase()}</span></p>
+                <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Type:</span> <span className="font-semibold text-gray-900 capitalize">{verifyingCert?.type?.toLowerCase()}</span></p>
                 <p className="text-sm"><span className="text-gray-500 font-medium inline-block w-20">Issued On:</span> <span className="font-semibold text-gray-900">{new Date(verifyingCert.issued_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></p>
               </div>
               

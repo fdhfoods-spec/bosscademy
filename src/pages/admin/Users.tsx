@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Loader2, Plus, Users, UserCog, Phone, BookOpen, Key, Edit3, Mail, Trash2, ChevronDown, User as UserIcon, Upload, Copy, Check } from 'lucide-react';
+import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon, Upload, } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 
@@ -47,8 +47,7 @@ export default function AdminUsers() {
   const [emailSendingUser, setEmailSendingUser] = useState<string | null>(null);
   const [emailPreviewUser, setEmailPreviewUser] = useState<User | null>(null);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
-  const [hasCopiedPassword, setHasCopiedPassword] = useState(false);
-
+  
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
@@ -121,16 +120,7 @@ CONFIDENTIAL & PROPRIETARY
     setIsLoading(false);
   };
 
-  const handleVerifyPayment = (userId: string) => {
-    if (IS_MOCK_SUPABASE) {
-      const updated = users.map(u => u.id === userId ? { ...u, payment_status: 'verified' } as User : u);
-      setMockUsers(updated);
-      setUsers(updated);
-      showNotification('Payment verified successfully. Student account activated.', 'success');
-      return;
-    }
-  };
-
+  
   useEffect(() => {
     fetchData();
   }, []);
@@ -287,7 +277,7 @@ CONFIDENTIAL & PROPRIETARY
         
         showNotification('Mentor created! A password setup email has been sent to them.', 'success');
         setIsAddModalOpen(false);
-        setNewMentor({ name: '', email: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
+        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
         fetchData();
       } catch (err: any) {
         showNotification(err.message, 'error');
@@ -298,7 +288,7 @@ CONFIDENTIAL & PROPRIETARY
       setMockUsers(updated);
       setUsers(updated);
       setIsAddModalOpen(false);
-      setNewMentor({ name: '', email: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
+      setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
       await sendRegistrationEmail(newProfile);
     }
   };
@@ -335,27 +325,14 @@ CONFIDENTIAL & PROPRIETARY
     }
   };
 
-  const handleResetPassword = (user: User) => {
-    setPasswordResetUser(user);
-    setNewGeneratedPassword('');
-  };
-
+  
   const confirmPasswordReset = () => {
     if (!passwordResetUser) return;
     showNotification(`Password for ${passwordResetUser.name} reset successfully!`, 'success');
     setPasswordResetUser(null);
   };
 
-  const copyPasswordToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(newGeneratedPassword);
-      setHasCopiedPassword(true);
-      setTimeout(() => setHasCopiedPassword(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-    }
-  };
-
+  
   const handleSendCredentials = (user: User) => {
     if (!user.email) {
       showNotification(`Cannot send email. No email address registered for ${user.name}.`, 'error');
@@ -494,7 +471,7 @@ CONFIDENTIAL & PROPRIETARY
           <button 
             onClick={() => { 
               setModalType('Mentor');
-              setNewMentor({ name: '', email: '', employee_id: generateEmployeeId(users), major_course: '', assigned_courses: [], status: 'active' });
+              setNewMentor({ name: '', email: '', phone: '', employee_id: generateEmployeeId(users), major_course: '', assigned_courses: [], status: 'active' });
               setIsAddModalOpen(true); 
             }}
             className="bg-blue-600 text-white px-5 py-2.5 rounded-md flex items-center hover:bg-blue-700 transition-colors shadow-sm font-black uppercase text-xs tracking-wider"

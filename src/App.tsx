@@ -52,8 +52,6 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
 };
 
 function AppRoutes() {
-  const { user } = useAuth();
-  
   return (
     <Routes>
       {/* Public Pages */}

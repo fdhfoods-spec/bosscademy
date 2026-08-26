@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getFile } from '../lib/storage';
 import { FileText, Eye, Download, FileArchive } from 'lucide-react';
 
