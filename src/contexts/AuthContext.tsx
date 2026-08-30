@@ -63,27 +63,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string): Promise<User> => {
     const cleanUsername = username.trim().toLowerCase();
     
-    // Check if the login attempt is for the Admin (using mock credentials)
-    // We explicitly keep the Admin flow unchanged as requested.
-    if (cleanUsername === 'admin@gmail.com') {
-      if (password !== '123456rj') throw new Error('Invalid admin credentials.');
-      
-      const mockAdmin: User = {
-        id: `mock-admin`,
-        username: 'admin@gmail.com',
-        name: `Admin User`,
-        email: `admin@gmail.com`,
-        role: 'Admin',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setUser(mockAdmin);
-      return mockAdmin;
-    }
-
     // For Mentors and Students, we use proper Supabase Authentication
     if (IS_MOCK_SUPABASE) {
+      // Check if the login attempt is for the Admin (using mock credentials)
+      if (cleanUsername === 'admin@gmail.com') {
+        if (password !== '123456rj') throw new Error('Invalid admin credentials.');
+        
+        const mockAdmin: User = {
+          id: `mock-admin`,
+          username: 'admin@gmail.com',
+          name: `Admin User`,
+          email: `admin@gmail.com`,
+          role: 'Admin',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setUser(mockAdmin);
+        return mockAdmin;
+      }
+
       // Mock Fallback for Demo without backend
       const mockUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
       const existingUser = mockUsers.find((u: any) => 

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, UploadCloud, Check, File, Loader2 } from 'lucide-react';
 import { getMockCurriculum, setMockCurriculum } from '../../lib/mockData';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { saveFile } from '../../lib/storage';
 
 export default function CourseContent() {
@@ -67,9 +67,42 @@ export default function CourseContent() {
 
         const current = getMockCurriculum();
         setMockCurriculum([...current, newItem]);
-      } else {
-        // Simulate real API delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+      } else if (id) {
+        let type: 'VIDEO' | 'PDF' | 'PPT' = 'PDF';
+        if (selectedFile.type.includes('video') || selectedFile.name.endsWith('.mp4')) type = 'VIDEO';
+        else if (selectedFile.type.includes('powerpoint') || selectedFile.name.endsWith('.ppt') || selectedFile.name.endsWith('.pptx')) type = 'PPT';
+
+        const newId = crypto.randomUUID();
+        await saveFile(newId, selectedFile);
+
+        // Find or create default module
+        let moduleId = '';
+        const { data: existingModules } = await supabase.from('modules').select('id').eq('course_id', id).limit(1);
+        
+        if (existingModules && existingModules.length > 0) {
+          moduleId = existingModules[0].id;
+        } else {
+          const { data: newMod } = await supabase.from('modules').insert([{
+            course_id: id,
+            title: 'Main Content',
+            description: 'Default module for content',
+            sort_order: 0
+          }]).select();
+          if (newMod && newMod.length > 0) moduleId = newMod[0].id;
+        }
+
+        if (moduleId) {
+          const { error: lessonError } = await supabase.from('lessons').insert([{
+            id: newId,
+            module_id: moduleId,
+            title: contentTitle,
+            description: description,
+            video_url: '',
+            duration: type === 'VIDEO' ? '05:00' : null,
+            sort_order: 99
+          }]);
+          if (lessonError) throw lessonError;
+        }
       }
 
       alert("Content Uploaded Successfully!");

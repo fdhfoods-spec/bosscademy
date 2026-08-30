@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye } from 'lucide-react';
+import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye, Check } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import type { Course, User as UserType } from '../../types';
 import { getMockCourses, setMockCourses, getMockUsers, setMockUsers } from '../../lib/mockData';
@@ -17,15 +17,35 @@ export default function AdminCourses() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createData, setCreateData] = useState({
     title: '',
+    course_code: '',
     description: '',
+    category: 'Uncategorized',
+    level: 'Beginner',
+    thumbnail: '',
     sequential: false,
     mentors: [] as string[]
   });
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [filterLevel, setFilterLevel] = useState('All');
+  const [sortBy, setSortBy] = useState('newest');
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editCourseMentors, setEditCourseMentors] = useState<string[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
+  
+  const [notification, setNotification] = useState<{message: string, type: 'success'|'error'} | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Students Modal State
   const [isStudentsModalOpen, setIsStudentsModalOpen] = useState(false);
@@ -36,10 +56,18 @@ export default function AdminCourses() {
   const fetchCourses = async () => {
     setIsLoading(true);
     if (IS_MOCK_SUPABASE) {
-      setCourses(getMockCourses());
+      const mockDb = getMockCourses();
+      setCourses(mockDb.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     } else {
-      const { data } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
-      if (data) setCourses(data as Course[]);
+      try {
+        const res = await fetch('/api/get-all-courses');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.courses) setCourses(data.courses as Course[]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch courses:', err);
+      }
     }
     setIsLoading(false);
   };
@@ -53,11 +81,18 @@ export default function AdminCourses() {
       return;
     }
 
-    const { data: usersData, error: usersError } = await supabase.from('profiles').select('*');
-    if (!usersError && usersData) {
-      setAllUsers(usersData as UserType[]);
-      const dbMentors = usersData.filter(u => u.role === 'Mentor');
-      setMentors(dbMentors.map(m => ({ id: m.id, name: m.name, email: m.email })));
+    try {
+      const res = await fetch('/api/get-users');
+      if (res.ok) {
+        const backendData = await res.json();
+        if (backendData.profiles) {
+          setAllUsers(backendData.profiles as UserType[]);
+          const dbMentors = backendData.profiles.filter((u: any) => u.role === 'Mentor');
+          setMentors(dbMentors.map((m: any) => ({ id: m.id, name: m.name, email: m.email })));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch mentors from backend API', err);
     }
   };
 
@@ -69,18 +104,21 @@ export default function AdminCourses() {
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createData.title.trim()) {
-      alert('Please provide a course title.');
+      showNotification('Please provide a course title.', 'error');
       return;
     }
     setIsCreating(true);
 
     const newCourse = {
       id: crypto.randomUUID(),
+      course_code: createData.course_code,
       title: createData.title,
       description: createData.description,
+      level: createData.level,
+      thumbnail: createData.thumbnail,
       mentor_id: createData.mentors.length > 0 ? createData.mentors[0] : undefined,
       status: 'Draft',
-      category: 'Uncategorized',
+      category: createData.category,
       duration: 'Flexible',
       video_url: '',
       created_at: new Date().toISOString(),
@@ -111,28 +149,62 @@ export default function AdminCourses() {
       setCourses(updatedCourses);
       setIsCreating(false);
       setIsCreateModalOpen(false);
-      setCreateData({ title: '', description: '', sequential: false, mentors: [] });
-      alert('Course created successfully!');
+      setCreateData({ title: '', course_code: '', description: '', category: 'Uncategorized', level: 'Beginner', thumbnail: '', sequential: false, mentors: [] });
+      showNotification('Course created successfully!', 'success');
     } else {
-      await supabase.from('courses').insert([newCourse]);
-      fetchCourses();
+      try {
+        const res = await fetch('/api/create-course', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseData: newCourse })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to insert course');
+        }
+        
+        await fetchCourses();
+        setIsCreateModalOpen(false);
+        setCreateData({ title: '', course_code: '', description: '', category: 'Uncategorized', level: 'Beginner', thumbnail: '', sequential: false, mentors: [] });
+        showNotification('Course created successfully!', 'success');
+      } catch (error: any) {
+        showNotification('Error creating course: ' + error.message, 'error');
+      }
     }
     
-    setCreateData({ title: '', description: '', sequential: false, mentors: [] });
-    setIsCreateModalOpen(false);
     setIsCreating(false);
   };
 
-  const handleDeleteCourse = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this course?')) return;
-    
+  const confirmDeleteCourse = (id: string) => {
+    setCourseToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    const id = courseToDelete;
     if (IS_MOCK_SUPABASE) {
       const updated = courses.filter(c => c.id !== id);
       setMockCourses(updated);
       setCourses(updated);
     } else {
-      await supabase.from('courses').delete().eq('id', id);
-      fetchCourses();
+      try {
+        const res = await fetch('/api/delete-course', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        if (!res.ok) throw new Error('Failed to delete course');
+        fetchCourses();
+        setIsDeleteModalOpen(false);
+        setCourseToDelete(null);
+        showNotification('Course deleted successfully!', 'success');
+      } catch (error) {
+        console.error(error);
+        showNotification('Failed to delete course', 'error');
+        setIsDeleteModalOpen(false);
+        setCourseToDelete(null);
+      }
     }
   };
 
@@ -147,7 +219,10 @@ export default function AdminCourses() {
           ? { 
               ...c, 
               title: editingCourse.title,
+              course_code: editingCourse.course_code,
               description: editingCourse.description,
+              level: editingCourse.level,
+              thumbnail: editingCourse.thumbnail,
               category: editingCourse.category,
               status: editingCourse.status,
               video_url: editingCourse.video_url,
@@ -184,29 +259,90 @@ export default function AdminCourses() {
 
       setEditingCourse(null);
       setIsUpdating(false);
-      alert('Course updated successfully!');
+      showNotification('Course updated successfully!', 'success');
     } else {
-      await supabase.from('courses').update({
-        title: editingCourse.title,
-        description: editingCourse.description,
-        category: editingCourse.category,
-        status: editingCourse.status,
-        video_url: editingCourse.video_url,
-        mentor_id: editingCourse.mentor_id
-      }).eq('id', editingCourse.id);
-      fetchCourses();
-      setEditingCourse(null);
-      setIsUpdating(false);
+      try {
+        const res = await fetch('/api/update-course', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingCourse.id,
+            courseData: {
+              title: editingCourse.title,
+              course_code: editingCourse.course_code,
+              description: editingCourse.description,
+              level: editingCourse.level,
+              thumbnail: editingCourse.thumbnail,
+              category: editingCourse.category,
+              status: editingCourse.status,
+              video_url: editingCourse.video_url,
+              mentor_id: editingCourse.mentor_id,
+              updated_at: new Date().toISOString()
+            }
+          })
+        });
+        if (!res.ok) throw new Error('Failed to update course');
+        fetchCourses();
+        setEditingCourse(null);
+        setIsUpdating(false);
+        showNotification('Course updated successfully!', 'success');
+      } catch (error) {
+        console.error(error);
+        showNotification('Failed to update course', 'error');
+        setIsUpdating(false);
+      }
     }
   };
 
-  const filteredCourses = courses.filter(course =>
-    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (course.category || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filtering & Sorting
+  let processedCourses = courses.filter(course => {
+    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (course.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (course.course_code || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = filterCategory === 'All' || course.category === filterCategory;
+    const matchesStatus = filterStatus === 'All' || course.status === filterStatus;
+    const matchesLevel = filterLevel === 'All' || course.level === filterLevel;
+    
+    return matchesSearch && matchesCategory && matchesStatus && matchesLevel;
+  });
+
+  if (sortBy === 'newest') {
+    processedCourses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } else if (sortBy === 'oldest') {
+    processedCourses.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  } else if (sortBy === 'name_asc') {
+    processedCourses.sort((a, b) => a.title.localeCompare(b.title));
+  } else if (sortBy === 'name_desc') {
+    processedCourses.sort((a, b) => b.title.localeCompare(a.title));
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(processedCourses.length / itemsPerPage);
+  const paginatedCourses = processedCourses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="bg-white min-h-screen -m-4 sm:-m-6 lg:-m-8 p-4 sm:p-6 lg:p-8 text-black font-sans">
+    <div className="bg-white min-h-screen -m-4 sm:-m-6 lg:-m-8 p-4 sm:p-6 lg:p-8 text-black font-sans relative">
+      
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-2xl z-[100] border-l-4 font-bold flex items-center gap-3 text-sm tracking-wide uppercase transition-all duration-300 transform translate-y-0 opacity-100 ${
+          notification.type === 'success' 
+            ? 'bg-white text-green-700 border-green-500' 
+            : 'bg-white text-red-700 border-red-500'
+        }`}>
+          {notification.type === 'success' ? (
+            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+              <Check size={14} className="text-green-600" />
+            </div>
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
+              <X size={14} className="text-red-600" />
+            </div>
+          )}
+          {notification.message}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-8">
 
         {/* Header Section */}
@@ -238,30 +374,80 @@ export default function AdminCourses() {
           </div>
         </div>
 
+        {/* Filters Bar */}
+        <div className="flex flex-wrap gap-4 items-center bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="bg-white border border-gray-300 text-sm font-bold text-gray-700 rounded-md px-3 py-2 outline-none">
+            <option value="All">All Categories</option>
+            <option value="Technology">Technology</option>
+            <option value="Business">Business</option>
+            <option value="Design">Design</option>
+            <option value="Uncategorized">Uncategorized</option>
+          </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="bg-white border border-gray-300 text-sm font-bold text-gray-700 rounded-md px-3 py-2 outline-none">
+            <option value="All">All Statuses</option>
+            <option value="Published">Published</option>
+            <option value="Draft">Draft</option>
+            <option value="Archived">Archived</option>
+          </select>
+          <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className="bg-white border border-gray-300 text-sm font-bold text-gray-700 rounded-md px-3 py-2 outline-none">
+            <option value="All">All Levels</option>
+            <option value="Beginner">Beginner</option>
+            <option value="Intermediate">Intermediate</option>
+            <option value="Advanced">Advanced</option>
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-white border border-gray-300 text-sm font-bold text-gray-700 rounded-md px-3 py-2 outline-none ml-auto">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name_asc">Name (A-Z)</option>
+            <option value="name_desc">Name (Z-A)</option>
+          </select>
+        </div>
+
         {/* Courses Grid */}
         {isLoading ? (
           <div className="flex justify-center items-center py-20">
             <Loader2 className="animate-spin text-blue-500" size={48} />
           </div>
-        ) : filteredCourses.length === 0 ? (
+        ) : paginatedCourses.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No courses found matching your criteria.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map(course => {
-              const courseMentors = allUsers.filter(u => u.role === 'Mentor' && u.assigned_courses?.includes(course.id));
-              const courseStudents = allUsers.filter(u => u.role === 'Student' && u.assigned_courses?.includes(course.id));
+            {paginatedCourses.map(course => {
+              const courseMentors = allUsers.filter(u => u.role === 'Mentor' && course.mentor_id === u.id);
+              const courseStudents = allUsers.filter(u => u.role === 'Student' && u.course === course.id);
               return (
-              <div key={course.id} className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 flex flex-col hover:border-gray-300 hover:shadow-md transition-all">
+              <div key={course.id} className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col hover:border-gray-300 hover:shadow-md transition-all overflow-hidden">
+                
+                {/* Course Thumbnail placeholder */}
+                <div className="h-40 bg-gray-200 w-full relative">
+                  {course.thumbnail ? (
+                    <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                      <span className="font-bold tracking-widest uppercase opacity-50">NO THUMBNAIL</span>
+                    </div>
+                  )}
+                  <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${course.status === 'Published' ? 'bg-green-500 text-white' : course.status === 'Archived' ? 'bg-gray-700 text-white' : 'bg-yellow-500 text-white'}`}>
+                    {course.status}
+                  </div>
+                  {course.level && (
+                    <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/70 text-white text-[10px] font-bold uppercase tracking-wider">
+                      {course.level}
+                    </div>
+                  )}
+                </div>
 
-                <h3 className="text-lg font-bold text-black uppercase tracking-wide mb-2 line-clamp-2">
-                  {course.title}
-                </h3>
+                <div className="p-5 flex-1 flex flex-col">
+                  {course.course_code && <div className="text-xs font-black text-blue-600 mb-1">{course.course_code}</div>}
+                  <h3 className="text-lg font-bold text-black uppercase tracking-wide mb-2 line-clamp-2">
+                    {course.title}
+                  </h3>
 
-                <p className="text-gray-600 text-xs leading-relaxed mb-4 line-clamp-3">
-                  This course provides an introduction to the fundamentals of the subject, its applications, and its impact on the industry. It is designed to provide learners with a strong foundation and practical skills.
-                </p>
+                  <p className="text-gray-600 text-xs leading-relaxed mb-4 line-clamp-3">
+                    {course.description || "No description provided."}
+                  </p>
 
                 <div className="flex flex-col gap-2 mb-6">
                   <div className="flex gap-2">
@@ -312,14 +498,36 @@ export default function AdminCourses() {
                     <Edit size={14} /> Edit
                   </button>
                   <button
-                    onClick={() => handleDeleteCourse(course.id)}
+                    onClick={() => confirmDeleteCourse(course.id)}
                     className="col-span-1 bg-[#e60000] hover:bg-red-700 text-white text-[10px] sm:text-xs font-bold py-2.5 rounded flex items-center justify-center gap-1.5 transition-colors uppercase"
                   >
                     <Trash2 size={14} /> Delete
                   </button>
                 </div>
+                </div>
               </div>
             )})}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!isLoading && totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 pt-4">
+            <button 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(p => p - 1)}
+              className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 text-sm font-bold uppercase tracking-wider"
+            >
+              Prev
+            </button>
+            <span className="text-sm font-bold">Page {currentPage} of {totalPages}</span>
+            <button 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(p => p + 1)}
+              className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 text-sm font-bold uppercase tracking-wider"
+            >
+              Next
+            </button>
           </div>
         )}
       </div>
@@ -336,15 +544,55 @@ export default function AdminCourses() {
             </div>
             
             <form onSubmit={handleCreateCourse} className="space-y-6 overflow-y-auto pr-2">
-              <div>
-                <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Course Title</label>
-                <input
-                  type="text"
-                  value={createData.title}
-                  onChange={e => setCreateData({ ...createData, title: e.target.value })}
-                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Course Title</label>
+                  <input
+                    type="text"
+                    value={createData.title}
+                    onChange={e => setCreateData({ ...createData, title: e.target.value })}
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Course Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CS101"
+                    value={createData.course_code}
+                    onChange={e => setCreateData({ ...createData, course_code: e.target.value })}
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Category</label>
+                  <select
+                    value={createData.category}
+                    onChange={e => setCreateData({ ...createData, category: e.target.value })}
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="Uncategorized">Uncategorized</option>
+                    <option value="Technology">Technology</option>
+                    <option value="Business">Business</option>
+                    <option value="Design">Design</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Level</label>
+                  <select
+                    value={createData.level}
+                    onChange={e => setCreateData({ ...createData, level: e.target.value })}
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -353,6 +601,17 @@ export default function AdminCourses() {
                   value={createData.description}
                   onChange={e => setCreateData({ ...createData, description: e.target.value })}
                   rows={4}
+                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-blue-600 mb-2 uppercase">Thumbnail URL (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/image.jpg"
+                  value={createData.thumbnail}
+                  onChange={e => setCreateData({ ...createData, thumbnail: e.target.value })}
                   className="w-full px-4 py-3 bg-white border border-gray-300 rounded-md text-black focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
@@ -434,15 +693,26 @@ export default function AdminCourses() {
               </button>
             </div>
             <form onSubmit={handleUpdateCourse} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Title</label>
-                <input
-                  type="text"
-                  value={editingCourse.title}
-                  onChange={e => setEditingCourse({ ...editingCourse, title: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Title</label>
+                  <input
+                    type="text"
+                    value={editingCourse.title}
+                    onChange={e => setEditingCourse({ ...editingCourse, title: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Course Code</label>
+                  <input
+                    type="text"
+                    value={editingCourse.course_code || ''}
+                    onChange={e => setEditingCourse({ ...editingCourse, course_code: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Description</label>
@@ -453,13 +723,52 @@ export default function AdminCourses() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Category</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Thumbnail URL</label>
                 <input
                   type="text"
-                  value={editingCourse.category || ''}
-                  onChange={e => setEditingCourse({ ...editingCourse, category: e.target.value })}
+                  value={editingCourse.thumbnail || ''}
+                  onChange={e => setEditingCourse({ ...editingCourse, thumbnail: e.target.value })}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
                 />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Category</label>
+                  <select
+                    value={editingCourse.category || 'Uncategorized'}
+                    onChange={e => setEditingCourse({ ...editingCourse, category: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Uncategorized">Uncategorized</option>
+                    <option value="Technology">Technology</option>
+                    <option value="Business">Business</option>
+                    <option value="Design">Design</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Level</label>
+                  <select
+                    value={editingCourse.level || 'Beginner'}
+                    onChange={e => setEditingCourse({ ...editingCourse, level: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Status</label>
+                  <select
+                    value={editingCourse.status || 'Draft'}
+                    onChange={e => setEditingCourse({ ...editingCourse, status: e.target.value as Course['status'] })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-md text-black focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Published">Published</option>
+                    <option value="Archived">Archived</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1 uppercase text-xs">Assign Mentors</label>
@@ -508,6 +817,39 @@ export default function AdminCourses() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-2xl max-w-sm w-full p-6 text-black flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <Trash2 size={32} className="text-[#e60000]" />
+            </div>
+            <h2 className="text-xl font-black uppercase tracking-wider mb-2">Delete Course?</h2>
+            <p className="text-gray-600 text-sm mb-8">
+              Are you sure you want to delete this course? This action cannot be undone and will permanently remove all associated content.
+            </p>
+            <div className="flex justify-center gap-4 w-full">
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setCourseToDelete(null);
+                }}
+                className="flex-1 px-4 py-3 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors text-sm uppercase font-bold text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteCourse}
+                className="flex-1 px-4 py-3 bg-[#e60000] text-white rounded-md hover:bg-red-700 transition-colors text-sm uppercase font-bold shadow-sm"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Students Modal */}
       {isStudentsModalOpen && selectedCourseForStudents && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
@@ -538,27 +880,27 @@ export default function AdminCourses() {
                     <p className="text-xs text-blue-700">Currently enrolled in this course</p>
                   </div>
                 </div>
-                <div className="text-3xl font-black text-blue-600">
-                  {(() => {
-                    const actualStudents = allUsers.filter(u => u.role === 'Student' && u.assigned_courses?.includes(selectedCourseForStudents.id));
-                    return actualStudents.length;
-                  })()}
-                </div>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Student Name</th>
-                      <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Email</th>
-                      <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Enrolled Date</th>
-                      <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                  <div className="text-3xl font-black text-blue-600">
                     {(() => {
-                      const actualStudents = allUsers.filter(u => u.role === 'Student' && u.assigned_courses?.includes(selectedCourseForStudents.id));
+                      const actualStudents = allUsers.filter(u => u.role === 'Student' && u.course === selectedCourseForStudents.id);
+                      return actualStudents.length;
+                    })()}
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Student Name</th>
+                        <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Enrolled Date</th>
+                        <th className="p-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const actualStudents = allUsers.filter(u => u.role === 'Student' && u.course === selectedCourseForStudents.id);
                       
                       if (actualStudents.length === 0) {
                         return (

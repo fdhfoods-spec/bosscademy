@@ -1,193 +1,338 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { CheckCircle2, QrCode, Clock, ArrowRight, ShieldCheck, CreditCard, Banknote } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, AlertCircle, Loader2, ArrowRight, ShieldCheck, CreditCard } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import type { Course, Payment } from '../../types';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function Payment() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const courseId = searchParams.get('courseId');
   
+  const [course, setCourse] = useState<Course | null>(null);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [tempUser, setTempUser] = useState<any>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'verified'>('pending');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'success' | 'failed'>('idle');
+  const [paymentDetails, setPaymentDetails] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Course fee (in a real app, this would come from the database course.fee)
+  const COURSE_FEE = 4999;
 
   useEffect(() => {
-    // Check if coming from registration
-    const stored = localStorage.getItem('temp_payment_user');
-    if (stored) {
-      setTempUser(JSON.parse(stored));
-    }
-
-    // Polling mechanism only if there's a temp user waiting for verification
-    let interval: ReturnType<typeof setInterval>;
-    if (stored) {
-      interval = setInterval(() => {
-        const allUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
-        const user = allUsers.find((u: any) => u.email === JSON.parse(stored).email);
-        
-        if (user && user.payment_status === 'verified') {
-          setPaymentStatus('verified');
-          clearInterval(interval);
-        }
-      }, 2000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, []);
-
-  const handleProceedToDashboard = async () => {
-    if (tempUser && paymentStatus === 'verified') {
-      await login(tempUser.email, tempUser.password);
-      localStorage.removeItem('temp_payment_user'); 
-      navigate('/student/dashboard');
-    }
-  };
-
-  const handleMockPayment = () => {
-    if (!tempUser) {
-      alert("Please register first before making a payment.");
-      navigate('/student/register');
+    if (!courseId) {
+      navigate('/student/enrollment');
       return;
     }
+    fetchCourseDetails();
+  }, [courseId, user]);
+
+  const fetchCourseDetails = async () => {
+    if (!user || !courseId) return;
+    setIsLoading(true);
+
+    // Live Mode
+    const { data: courseData } = await supabase.from('courses').select('*').eq('id', courseId).single();
+    if (courseData) setCourse(courseData);
     
-    setIsProcessing(true);
+    const { data: enrollData } = await supabase.from('enrollments').select('id').eq('student_id', user.id).eq('course_id', courseId);
+    if (enrollData && enrollData.length > 0) {
+      setIsEnrolled(true);
+    }
     
-    // Simulate API delay
-    setTimeout(() => {
-      // Auto-verify the user in mock storage
-      const allUsers = JSON.parse(localStorage.getItem('mock_users') || '[]');
-      const updatedUsers = allUsers.map((u: any) => 
-        u.email === tempUser.email ? { ...u, payment_status: 'verified' } : u
-      );
-      localStorage.setItem('mock_users', JSON.stringify(updatedUsers));
-      
-      setPaymentStatus('verified');
-      setIsProcessing(false);
-    }, 2500);
+    setIsLoading(false);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans selection:bg-blue-200">
+  const handlePayNow = async () => {
+    if (!user || !course) return;
+    setIsProcessing(true);
+    setErrorMsg('');
+
+    try {
+      // 1. Create order on the backend
+      const orderRes = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: course.id,
+          amount: COURSE_FEE,
+          currency: 'INR'
+        })
+      });
       
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
-        <div className="mx-auto w-16 h-16 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20 mb-4">
-          <ShieldCheck className="text-white" size={32} />
-        </div>
-        <h2 className="text-3xl font-extrabold text-slate-900">Secure Payment</h2>
-        <p className="mt-2 text-sm text-gray-600">BOSS Academy Premium Enrollment</p>
+      const orderData = await orderRes.json();
+      
+      if (!orderRes.ok || !orderData.id) {
+        throw new Error(orderData.error || 'Failed to create payment order');
+      }
+
+      // 2. Open Razorpay Checkout
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'dummy_key',
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "BOSS Academy",
+        description: `Enrollment for ${course.title}`,
+        order_id: orderData.id,
+        handler: async function (response: any) {
+          await verifyPayment(response, orderData);
+        },
+        prefill: {
+          name: user.name,
+          email: user.email,
+          contact: user.phone || '9999999999'
+        },
+        theme: {
+          color: "#2563eb" // blue-600
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      
+      rzp.on('payment.failed', function (response: any) {
+        setIsProcessing(false);
+        setPaymentStatus('failed');
+        setErrorMsg(response.error.description || 'Payment failed. Please try again.');
+      });
+      
+      rzp.open();
+
+    } catch (err: any) {
+      setIsProcessing(false);
+      setPaymentStatus('failed');
+      setErrorMsg(err.message || 'Network error while initiating payment.');
+    }
+  };
+
+  const verifyPayment = async (response: any, _orderData: any) => {
+    try {
+      // 3. Verify signature on the backend
+      const verifyRes = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature
+        })
+      });
+
+      const verifyData = await verifyRes.json();
+      
+      if (verifyRes.ok && verifyData.success) {
+        // 4. Verification successful, record payment and enrollment
+        await completeEnrollment(response.razorpay_order_id, response.razorpay_payment_id);
+      } else {
+        throw new Error(verifyData.error || 'Payment verification failed');
+      }
+    } catch (err: any) {
+      setIsProcessing(false);
+      setPaymentStatus('failed');
+      setErrorMsg(err.message || 'Payment verification failed.');
+    }
+  };
+
+  const completeEnrollment = async (orderId: string, paymentId: string) => {
+    if (!user || !course) return;
+
+    const newPayment = {
+      id: crypto.randomUUID(),
+      student_id: user.id,
+      course_id: course.id,
+      order_id: orderId,
+      payment_id: paymentId,
+      amount: COURSE_FEE,
+      currency: 'INR',
+      status: 'successful' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const newEnrollment = {
+      id: crypto.randomUUID(),
+      student_id: user.id,
+      course_id: course.id,
+      enrolled_at: new Date().toISOString(),
+      status: 'active' as const,
+      progress: 0
+    };
+
+    await supabase.from('payments').insert([newPayment]);
+    await supabase.from('enrollments').insert([newEnrollment]);
+
+    setPaymentDetails(newPayment);
+    setPaymentStatus('success');
+    setIsProcessing(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600" size={48} />
       </div>
+    );
+  }
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-10 px-8 shadow-xl sm:rounded-2xl border border-gray-100 text-center relative overflow-hidden">
-          
-          {/* Decorative Background */}
-          <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-50 to-white -z-10" />
+  if (!course) {
+    return (
+      <div className="text-center py-20">
+        <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Course not found</h3>
+        <button onClick={() => navigate('/student/enrollment')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Back to Courses
+        </button>
+      </div>
+    );
+  }
 
-          {paymentStatus === 'pending' ? (
-            <>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Complete Your Payment</h2>
-              <p className="text-gray-500 mb-8 text-sm">
-                Scan the QR code below using any UPI app (GPay, PhonePe, Paytm) to finalize your course enrollment.
-              </p>
+  if (isEnrolled) {
+    return (
+      <div className="text-center py-20 bg-white rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto mt-12">
+        <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">You are already enrolled!</h2>
+        <p className="text-gray-500 mb-8">You already have active access to {course.title}.</p>
+        <button
+          onClick={() => navigate(`/student/courses/${course.id}`)}
+          className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center"
+        >
+          Go to Course <ArrowRight className="ml-2" size={18} />
+        </button>
+      </div>
+    );
+  }
 
-              {/* QR Code Container */}
-              <div className="bg-white p-4 rounded-2xl inline-block mb-8 shadow-md border border-gray-100 relative group hover:scale-105 transition-transform cursor-pointer" onClick={handleMockPayment}>
-                <div className="absolute inset-0 bg-blue-600 opacity-0 group-hover:opacity-5 transition-opacity rounded-2xl" />
-                <img 
-                  src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=bossacademy@upi&pn=BOSSAcademy&cu=INR" 
-                  alt="Payment QR Code" 
-                  className={`w-48 h-48 rounded-lg ${isProcessing ? 'opacity-50 blur-sm' : ''} transition-all`}
-                />
-                {isProcessing && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-2"></div>
-                    <span className="text-sm font-bold text-blue-900 bg-white/80 px-2 py-1 rounded">Processing...</span>
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      {paymentStatus === 'idle' || paymentStatus === 'failed' ? (
+        <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100 flex flex-col md:flex-row">
+          {/* Order Summary */}
+          <div className="bg-gray-50 p-8 md:w-1/2 border-b md:border-b-0 md:border-r border-gray-100">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h2>
+            
+            <div className="flex gap-4 mb-6">
+              <div className="w-24 h-24 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                {course.thumbnail ? (
+                  <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 font-bold text-2xl">
+                    {course.title.charAt(0)}
                   </div>
                 )}
               </div>
-
-              <div className="flex justify-center gap-6 mb-8 border-b border-gray-100 pb-8">
-                <button onClick={handleMockPayment} disabled={isProcessing} className="flex flex-col items-center group focus:outline-none">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mb-2 group-hover:bg-blue-50 group-hover:scale-110 transition-all">
-                    <QrCode className="text-blue-600" size={20} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600 group-hover:text-blue-600">Scan QR</span>
-                </button>
-                <button onClick={handleMockPayment} disabled={isProcessing} className="flex flex-col items-center group focus:outline-none">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mb-2 group-hover:bg-blue-50 group-hover:scale-110 transition-all">
-                    <CreditCard className="text-blue-600" size={20} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600 group-hover:text-blue-600">UPI App</span>
-                </button>
-                <button onClick={handleMockPayment} disabled={isProcessing} className="flex flex-col items-center group focus:outline-none">
-                  <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mb-2 group-hover:bg-blue-50 group-hover:scale-110 transition-all">
-                    <Banknote className="text-blue-600" size={20} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-600 group-hover:text-blue-600">Pay Securely</span>
-                </button>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg leading-tight">{course.title}</h3>
+                <p className="text-sm text-gray-500 mt-1">{course.category}</p>
+                <p className="text-sm text-gray-500 mt-1">Duration: {course.duration || 'Flexible'}</p>
               </div>
+            </div>
 
-              {tempUser ? (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-left flex items-start">
-                  <Clock className="text-blue-600 mt-0.5 mr-3 shrink-0" size={20} />
-                  <div>
-                    <h4 className="text-sm font-bold text-blue-900">Awaiting Verification</h4>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Your account (<span className="font-semibold">{tempUser.email}</span>) is pending. Admin will verify your payment shortly to grant access.
-                    </p>
-                    <div className="mt-3 flex items-center text-xs font-bold text-blue-600">
-                      <span className="relative flex h-2.5 w-2.5 mr-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
-                      </span>
-                      Listening for admin approval...
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-4 pt-6 border-t border-gray-200">
+              <div className="flex justify-between text-gray-600">
+                <span>Course Fee</span>
+                <span>₹{COURSE_FEE.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Discount</span>
+                <span className="text-green-600">-₹0</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold text-gray-900 pt-4 border-t border-gray-200">
+                <span>Total Payable</span>
+                <span>₹{COURSE_FEE.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Checkout Info */}
+          <div className="p-8 md:w-1/2 bg-white flex flex-col justify-center">
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Student Details</h2>
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm text-gray-700">
+                <p><span className="font-medium text-gray-900">Name:</span> {user?.name}</p>
+                <p><span className="font-medium text-gray-900">Email:</span> {user?.email}</p>
+              </div>
+            </div>
+
+            {paymentStatus === 'failed' && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-lg flex items-start text-red-700">
+                <AlertCircle className="shrink-0 mr-3 mt-0.5" size={20} />
+                <p className="text-sm font-medium">{errorMsg}</p>
+              </div>
+            )}
+
+            <button
+              onClick={handlePayNow}
+              disabled={isProcessing}
+              className="w-full py-4 px-6 bg-blue-600 text-white text-lg font-bold rounded-xl shadow-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="animate-spin mr-2" size={24} /> Processing...
+                </>
               ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-500 font-medium">After completing your payment, please register or log in to access your courses.</p>
-                  <div className="flex gap-4 justify-center">
-                    <Link to="/student/register" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-                      Register Now
-                    </Link>
-                    <Link to="/student/login" className="px-6 py-2.5 bg-white border border-gray-300 text-slate-700 font-bold rounded-lg hover:bg-gray-50 transition-colors">
-                      Log In
-                    </Link>
-                  </div>
-                </div>
+                <>
+                  <CreditCard className="mr-2" size={24} /> Pay ₹{COURSE_FEE.toLocaleString('en-IN')}
+                </>
               )}
-            </>
-          ) : (
-            <div className="py-8">
-              <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-                <CheckCircle2 className="text-green-600" size={40} />
-              </div>
-              <h2 className="text-3xl font-extrabold text-slate-900 mb-3">Payment Verified!</h2>
-              <p className="text-gray-600 mb-8 text-sm max-w-xs mx-auto leading-relaxed">
-                Your transaction was successfully confirmed. Welcome to BOSS Academy! Your courses are now unlocked.
-              </p>
+            </button>
+            
+            <div className="mt-6 flex items-center justify-center text-sm text-gray-500 font-medium">
+              <ShieldCheck size={18} className="mr-2 text-green-600" />
+              Secure payment processed by Razorpay
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white py-12 px-8 shadow-xl sm:rounded-2xl border border-gray-100 text-center max-w-2xl mx-auto">
+          <div className="mx-auto w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle2 className="text-green-600" size={56} />
+          </div>
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Payment Successful!</h2>
+          <p className="text-gray-500 mb-8 text-lg">
+            You are now enrolled in <span className="font-bold text-gray-900">{course.title}</span>
+          </p>
 
-              <button
-                onClick={handleProceedToDashboard}
-                className="w-full flex items-center justify-center py-4 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all transform hover:-translate-y-0.5"
-              >
-                Enter Dashboard <ArrowRight size={18} className="ml-2" />
-              </button>
+          {paymentDetails && (
+            <div className="bg-gray-50 rounded-xl p-6 text-left mb-8 max-w-md mx-auto space-y-3 border border-gray-100">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Payment ID</span>
+                <span className="font-medium text-gray-900">{paymentDetails.payment_id}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Amount Paid</span>
+                <span className="font-bold text-gray-900">₹{paymentDetails.amount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Date</span>
+                <span className="font-medium text-gray-900">{new Date(paymentDetails.created_at).toLocaleString()}</span>
+              </div>
             </div>
           )}
 
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => navigate('/student/payments')}
+              className="px-6 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              View Receipt
+            </button>
+            <button
+              onClick={() => navigate(`/student/courses/${course.id}`)}
+              className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/30 flex items-center justify-center"
+            >
+              Go to My Course <ArrowRight className="ml-2" size={18} />
+            </button>
+          </div>
         </div>
-        
-        {/* Footer info */}
-        <div className="mt-8 text-center text-sm text-gray-500 font-medium flex items-center justify-center gap-2">
-          <ShieldCheck size={16} className="text-gray-400" />
-          <span>Payments are 100% secure and encrypted.</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

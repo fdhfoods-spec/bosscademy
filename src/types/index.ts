@@ -23,14 +23,17 @@ export interface User {
 
 export interface Course {
   id: string;
+  course_code?: string;
   title: string;
   description: string;
+  level?: string;
   thumbnail?: string;
   video_url?: string;
+  price?: number;
   category: string;
   duration: string;
   mentor_id?: string; // Kept optional for backward compatibility
-  status: 'Active' | 'Inactive' | 'Published' | 'Draft';
+  status: 'Active' | 'Inactive' | 'Published' | 'Draft' | 'Archived';
   created_at: string;
   updated_at: string;
 }
@@ -78,4 +81,20 @@ export interface Lesson {
   duration?: string;
   sort_order: number;
   created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  student_id: string;
+  course_id: string;
+  order_id: string;
+  payment_id?: string;
+  signature?: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'successful' | 'failed' | 'refunded';
+  payment_method?: string;
+  payment_gateway?: string;
+  created_at: string;
+  updated_at: string;
 }

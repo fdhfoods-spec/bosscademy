@@ -55,8 +55,7 @@ export default function MentorCourses() {
 
     if (IS_MOCK_SUPABASE) {
       const allCourses = getMockCourses();
-      const assignedIds = user.assigned_courses || [];
-      setCourses(allCourses.filter(c => assignedIds.includes(c.id)));
+      setCourses(allCourses.filter(c => c.mentor_id === user.id));
       setIsLoading(false);
       return;
     }
@@ -64,7 +63,7 @@ export default function MentorCourses() {
     const { data, error } = await supabase
       .from('courses')
       .select('*')
-      .in('id', user.assigned_courses || [])
+      .eq('mentor_id', user.id)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -335,7 +334,7 @@ export default function MentorCourses() {
             {viewMode === 'list' ? 'My Assigned Courses' : `Course Builder: ${selectedCourse?.title}`}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {viewMode === 'list' ? 'Manage the courses you own and upload new lessons.' : 'Organize modules and upload give it content.'}
+            {viewMode === 'list' ? 'Manage the courses you own and upload new lessons.' : 'Organize modules and upload lesson content.'}
           </p>
         </div>
 
@@ -481,7 +480,7 @@ export default function MentorCourses() {
                           onClick={(e) => { e.stopPropagation(); setTargetModuleId(module.id); setIsVideoUploadModalOpen(true); }}
                           className="flex items-center text-xs bg-white border border-gray-200 text-gray-700 hover:border-blue-300 hover:text-blue-600 px-2 py-1 rounded transition-colors"
                         >
-                          <Upload size={14} className="mr-1" /> give it
+                          <Upload size={14} className="mr-1" /> Lesson
                         </button>
                       </div>
                     </div>
@@ -518,7 +517,7 @@ export default function MentorCourses() {
                           </div>
                         ) : (
                           <div className="p-6 text-center text-sm text-gray-500 italic bg-gray-50/30 rounded-lg m-2 border border-dashed border-gray-200">
-                            No give it in this chapter yet. Click "give it" to add one.
+                            No lessons in this chapter yet. Click "Lesson" to add one.
                           </div>
                         )}
                       </div>
@@ -572,7 +571,7 @@ export default function MentorCourses() {
             <div className="bg-blue-50 p-5 rounded-xl border border-blue-100">
               <h3 className="font-bold text-blue-900 mb-2">Publishing</h3>
               <p className="text-sm text-blue-700 mb-4">
-                Once you have uploaded all your give it, you can publish the course to make it visible to enrolled students.
+                Once you have uploaded all your lessons, you can publish the course to make it visible to enrolled students.
               </p>
               <button className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-md font-medium text-sm hover:bg-blue-700 transition-colors shadow-sm">
                 Publish Course
@@ -720,22 +719,9 @@ export default function MentorCourses() {
                 {previewActiveLesson ? (
                   <>
                     <div className="w-full aspect-video bg-gray-900 rounded-lg flex items-center justify-center shadow-md border border-gray-200 overflow-hidden relative mb-4">
-                      {previewActiveLesson.video_url || IS_MOCK_SUPABASE ? (
-                        <div className="w-full h-full">
-                          <LocalMediaRenderer id={previewActiveLesson.id} type={previewActiveLesson.title.toLowerCase().includes('pdf') ? 'PDF' : previewActiveLesson.title.toLowerCase().includes('ppt') ? 'PPT' : 'VIDEO'} fallbackUrl={previewActiveLesson.video_url || undefined} />
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-gray-500">
-                          {previewActiveLesson.title.toLowerCase().includes('pdf') ? (
-                            <FileText size={64} className="mb-2" />
-                          ) : previewActiveLesson.title.toLowerCase().includes('ppt') || previewActiveLesson.title.toLowerCase().includes('presentation') ? (
-                            <Monitor size={64} className="mb-2" />
-                          ) : (
-                            <PlayCircle size={64} className="mb-2" />
-                          )}
-                          <span className="text-sm uppercase tracking-wider font-bold">No Media File Uploaded</span>
-                        </div>
-                      )}
+                      <div className="w-full h-full">
+                        <LocalMediaRenderer id={previewActiveLesson.id} type={previewActiveLesson.title.toLowerCase().includes('pdf') ? 'PDF' : previewActiveLesson.title.toLowerCase().includes('ppt') ? 'PPT' : 'VIDEO'} fallbackUrl={previewActiveLesson.video_url || undefined} />
+                      </div>
                     </div>
 
                     <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">

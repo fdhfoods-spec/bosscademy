@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon, Upload, } from 'lucide-react';
+import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon } from 'lucide-react';
 import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,6 +11,8 @@ const adminAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: 'admin-auth-temp-key',
   }
 });
 
@@ -30,13 +32,14 @@ export default function AdminUsers() {
   
   // Student fields
   const [newStudent, setNewStudent] = useState({ 
-    name: '', email: '', phone: '', course: '', status: 'active' as 'active' | 'inactive' 
+    name: '', email: '', phone: '', course: '', password: '', status: 'active' as 'active' | 'inactive' 
   });
   
   // Mentor fields
   const [newMentor, setNewMentor] = useState({
-    name: '', email: '', phone: '', employee_id: '', major_course: '', assigned_courses: [] as string[], status: 'active' as 'active' | 'inactive'
+    name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [] as string[], status: 'active' as 'active' | 'inactive'
   });
+  const [isSavingMentor, setIsSavingMentor] = useState(false);
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
@@ -111,13 +114,38 @@ CONFIDENTIAL & PROPRIETARY
       return;
     }
 
-    const { data: profilesData } = await supabase.from('profiles').select('*').in('role', ['Mentor', 'Student']).order('created_at', { ascending: false });
-    if (profilesData) setUsers(profilesData as User[]);
-    
-    const { data: coursesData } = await supabase.from('courses').select('*');
-    if (coursesData) setCourses(coursesData as Course[]);
-
-    setIsLoading(false);
+    try {
+      // Because the Admin is a hardcoded mock user in AuthContext, they don't have a real Supabase Auth token.
+      // So querying directly from the frontend gets blocked by Row Level Security (RLS).
+      // We use a custom backend API that uses the Service Role Key to bypass RLS for the Admin.
+      const res = await fetch('/api/get-users');
+      if (!res.ok) throw new Error('Failed to fetch from backend API');
+      const backendData = await res.json();
+      
+      // Fetch courses via proxy to avoid RLS
+      const coursesRes = await fetch('/api/get-all-courses');
+      let fetchedCourses: Course[] = [];
+      if (coursesRes.ok) {
+        const cData = await coursesRes.json();
+        fetchedCourses = cData.courses || [];
+        setCourses(fetchedCourses);
+      }
+      
+      if (backendData.profiles) {
+        // Map assigned_courses to Mentors from the fetched courses
+        const mappedProfiles = (backendData.profiles as User[]).map(user => {
+          if (user.role === 'Mentor') {
+             user.assigned_courses = fetchedCourses.filter(c => c.mentor_id === user.id).map(c => c.id);
+          }
+          return user;
+        });
+        setUsers(mappedProfiles);
+      }
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to fetch data from database.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   
@@ -154,17 +182,11 @@ CONFIDENTIAL & PROPRIETARY
 
     if (!IS_MOCK_SUPABASE) {
       try {
-        const dummyPassword = crypto.randomUUID() + "Aa1!";
-        const { data: authData, error: authError } = await adminAuthClient.auth.signUp({
-          email: newStudent.email,
-          password: dummyPassword,
-        });
-
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("Failed to create user in authentication.");
-
+        const firstName = newStudent.name.trim().split(' ')[0] || 'User';
+        const generatedPassword = `${firstName}@1001`;
+        const finalPassword = newStudent.password.trim() || generatedPassword;
+        
         const profileData = {
-          id: authData.user.id,
           name: newStudent.name,
           username: newStudent.email,
           email: newStudent.email,
@@ -174,25 +196,64 @@ CONFIDENTIAL & PROPRIETARY
           status: newStudent.status
         };
 
-        const { error: profileError } = await supabase.from('profiles').insert([profileData]);
-        if (profileError) throw profileError;
+        const createRes = await fetch('/api/create-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: newStudent.email, password: finalPassword, profileData: profileData })
+        });
+
+        if (!createRes.ok) {
+          const errData = await createRes.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to create student account');
+        }
+
+        const createData = await createRes.json();
+        const authUserId = createData.user?.user?.id || createData.user?.id || createData.id;
 
         // Auto enroll if course is selected
         if (newStudent.course) {
-           await supabase.from('enrollments').insert([{
-             student_id: authData.user.id,
-             course_id: newStudent.course
-           }]);
+          // Since the user is already created, we can just use the update API to sync their enrollment
+          await fetch('/api/update-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: authUserId,
+              isStudent: true,
+              studentCourseId: newStudent.course
+            })
+          });
         }
 
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(newStudent.email);
-        if (resetError) {
-          console.error("Failed to send reset email:", resetError);
+        const subject = 'Your Boss Academy Account Created';
+        const text = `HELLO ${newStudent.name.toUpperCase()},
+
+An administrator has created an account for you on the Boss Academy LMS.
+Your assigned role is: STUDENT.
+
+YOUR LOGIN DETAILS
+Email: ${newStudent.email}
+Password: ${finalPassword}
+
+Please log in using the details above and change your password immediately.
+${window.location.origin}/student/login
+
+CONFIDENTIAL & PROPRIETARY
+© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
+
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: newStudent.email, subject, text })
+          });
+          showNotification('Student created! A credentials email has been sent to them.', 'success');
+        } catch (emailErr) {
+          console.error("Failed to send credentials email:", emailErr);
+          showNotification('Student created! But failed to send credentials email.', 'error');
         }
         
-        showNotification('Student created! A password setup email has been sent to them.', 'success');
         setIsAddModalOpen(false);
-        setNewStudent({ name: '', email: '', phone: '', course: '', status: 'active' });
+        setNewStudent({ name: '', email: '', phone: '', course: '', password: '', status: 'active' });
         fetchData();
       } catch (err: any) {
         showNotification(err.message, 'error');
@@ -209,13 +270,22 @@ CONFIDENTIAL & PROPRIETARY
       }
       
       setIsAddModalOpen(false);
-      setNewStudent({ name: '', email: '', phone: '', course: '', status: 'active' });
+      setNewStudent({ name: '', email: '', phone: '', course: '', password: '', status: 'active' });
       await sendRegistrationEmail(newProfile);
     }
   };
 
   const handleAddMentor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingMentor) return;
+    
+    // Validate required fields
+    if (!newMentor.name.trim() || !newMentor.email.trim() || !newMentor.major_course?.trim()) {
+      showNotification('Name, Email, and Major Course are required.', 'error');
+      return;
+    }
+
+    setIsSavingMentor(true);
     
     const token = crypto.randomUUID();
     const newProfile: User = {
@@ -237,59 +307,103 @@ CONFIDENTIAL & PROPRIETARY
 
     if (!IS_MOCK_SUPABASE) {
       try {
-        const dummyPassword = crypto.randomUUID() + "Aa1!";
-        const email = newMentor.email || `${newMentor.employee_id.toLowerCase()}@bossacademy.com`;
+        const firstName = newMentor.name.trim().split(' ')[0] || 'User';
+        const generatedPassword = `${firstName}@1001`;
+        const finalPassword = newMentor.password.trim() || generatedPassword;
+        const email = newMentor.email;
         
-        const { data: authData, error: authError } = await adminAuthClient.auth.signUp({
-          email: email,
-          password: dummyPassword,
-        });
-
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("Failed to create user in authentication.");
-
         const profileData = {
-          id: authData.user.id,
+          // id is injected by backend
           name: newMentor.name,
           username: email,
-          employee_id: newMentor.employee_id,
           email: email,
           phone: newMentor.phone || null,
           role: 'Mentor',
           status: newMentor.status,
-          department: newMentor.major_course || null
+          employee_id: newMentor.employee_id || null,
+          major_course: newMentor.major_course || null
         };
 
-        const { error: profileError } = await supabase.from('profiles').insert([profileData]);
-        if (profileError) throw profileError;
+        const createRes = await fetch('/api/create-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: finalPassword, profileData: profileData })
+        });
 
-        // Assign courses to Mentor
-        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0) {
-          for (const courseId of newMentor.assigned_courses) {
-            await supabase.from('courses').update({ mentor_id: authData.user.id }).eq('id', courseId);
-          }
+        if (!createRes.ok) {
+          const errData = await createRes.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to create user account');
         }
 
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
-        if (resetError) {
-          console.error("Failed to send reset email:", resetError);
+        const createData = await createRes.json();
+        const authUserId = createData.user?.user?.id || createData.user?.id || createData.id;
+
+        // Automatically assign course if provided
+        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0) {
+          await fetch('/api/update-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: authUserId,
+              isMentor: true,
+              assignedCourses: newMentor.assigned_courses
+            })
+          });
+        }
+
+        const subject = 'Your Boss Academy Account Created';
+        const text = `HELLO ${newMentor.name.toUpperCase()},
+
+An administrator has created an account for you on the Boss Academy LMS.
+Your assigned role is: MENTOR.
+
+YOUR LOGIN DETAILS
+Email: ${email}
+Password: ${finalPassword}
+
+Please log in using the details above and change your password immediately.
+${window.location.origin}/mentor/login
+
+CONFIDENTIAL & PROPRIETARY
+© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
+
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: email, subject, text })
+          });
+          showNotification('Mentor created! A credentials email has been sent to them.', 'success');
+        } catch (emailErr) {
+          console.error("Failed to send credentials email:", emailErr);
+          showNotification('Mentor created! But failed to send credentials email.', 'error');
         }
         
-        showNotification('Mentor created! A password setup email has been sent to them.', 'success');
+        await fetchData();
         setIsAddModalOpen(false);
-        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
-        fetchData();
+        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [], status: 'active' });
       } catch (err: any) {
-        showNotification(err.message, 'error');
+        const errorMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Failed to connect to the database. Please check your network or Supabase configuration.');
+        if (errorMsg === 'Failed to fetch') {
+          showNotification('Network error (Failed to fetch). Please check your internet connection, AdBlocker, or Supabase URL configuration.', 'error');
+        } else {
+          showNotification(errorMsg, 'error');
+        }
+      } finally {
+        setIsSavingMentor(false);
       }
     } else {
-      const currentUsers = getMockUsers();
-      const updated = [newProfile, ...currentUsers];
-      setMockUsers(updated);
-      setUsers(updated);
-      setIsAddModalOpen(false);
-      setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', assigned_courses: [], status: 'active' });
-      await sendRegistrationEmail(newProfile);
+      try {
+        const currentUsers = getMockUsers();
+        const updated = [newProfile, ...currentUsers];
+        setMockUsers(updated);
+        setUsers(updated);
+        setIsAddModalOpen(false);
+        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [], status: 'active' });
+        await sendRegistrationEmail(newProfile);
+      } finally {
+        setIsSavingMentor(false);
+      }
     }
   };
 
@@ -309,6 +423,42 @@ CONFIDENTIAL & PROPRIETARY
       setUsers(updated);
       setEditingUser(null);
       showNotification(`${editingUser.role} updated successfully!`, 'success');
+    } else {
+      try {
+        const updateData = {
+          name: editingUser.name,
+          phone: editingUser.phone,
+          status: editingUser.status,
+          department: editingUser.department,
+          course: editingUser.course,
+          major_course: editingUser.major_course,
+          employee_id: editingUser.employee_id,
+        };
+
+        const res = await fetch('/api/update-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: editingUser.id,
+            profileData: updateData,
+            assignedCourses: editingUser.assigned_courses,
+            isMentor: editingUser.role === 'Mentor',
+            isStudent: editingUser.role === 'Student',
+            studentCourseId: editingUser.course
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Update failed');
+        }
+
+        await fetchData();
+        setEditingUser(null);
+        showNotification(`${editingUser.role} updated successfully!`, 'success');
+      } catch (err: any) {
+        showNotification(err.message || 'Failed to update user.', 'error');
+      }
     }
   };
 
@@ -321,6 +471,26 @@ CONFIDENTIAL & PROPRIETARY
         setUsers(updated);
         setDeletingUserId(null);
         showNotification('User deleted successfully!', 'success');
+      } else {
+        try {
+          // Send request to custom backend to safely delete auth.users record which cascades to profiles
+          const res = await fetch('/api/delete-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: deletingUserId })
+          });
+          
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Failed to delete user');
+          }
+
+          await fetchData();
+          setDeletingUserId(null);
+          showNotification('User deleted successfully!', 'success');
+        } catch (err: any) {
+          showNotification(err.message || 'Failed to delete user.', 'error');
+        }
       }
     }
   };
@@ -373,12 +543,50 @@ CONFIDENTIAL & PROPRIETARY
         showNotification('Failed to send email. Check your SMTP configuration.', 'error');
       }
     } else {
-      // Live Supabase
-      const { error } = await supabase.auth.resetPasswordForEmail(emailPreviewUser.email);
-      if (error) {
-        showNotification(error.message, 'error');
-      } else {
+      // Live Supabase - Bypass Supabase rate limits with custom Admin API route
+      try {
+        const linkRes = await fetch('/api/generate-reset-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailPreviewUser.email })
+        });
+        
+        const linkData = await linkRes.json();
+        
+        if (!linkRes.ok) {
+          throw new Error(linkData.error || 'Failed to generate secure reset link');
+        }
+
+        const subject = 'Your Boss LMS Account Setup';
+        const text = `HELLO ${emailPreviewUser.name.toUpperCase()},
+
+An administrator has requested a password setup link for your Boss Academy LMS account.
+Your assigned role is: ${emailPreviewUser.role.toUpperCase()} .
+
+YOUR LOGIN DETAILS
+Email: ${emailPreviewUser.email}
+
+To access your account, you need to set up a secure password. Click the link below to get started:
+${linkData.action_link}
+
+Note: This link will expire in 24 hours. If it expires, please contact your administrator.
+
+CONFIDENTIAL & PROPRIETARY
+© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
+
+        const emailRes = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: emailPreviewUser.email, subject, text })
+        });
+        
+        if (!emailRes.ok) {
+          throw new Error('Failed to send email. Check your SMTP configuration.');
+        }
+
         showNotification(`Credential email sent to ${emailPreviewUser.email}`, 'success');
+      } catch (err: any) {
+        showNotification(err.message, 'error');
       }
     }
     
@@ -464,20 +672,20 @@ CONFIDENTIAL & PROPRIETARY
             onClick={() => { setModalType('Student'); setIsAddModalOpen(true); }}
             className="bg-blue-600 text-white px-5 py-2.5 rounded-md flex items-center hover:bg-blue-700 transition-colors shadow-sm font-black uppercase text-xs tracking-wider"
           >
-            <Upload size={16} className="mr-2" />
-            Onboard Students
+            <Plus size={16} className="mr-2" />
+            Add Student
           </button>
           
           <button 
             onClick={() => { 
               setModalType('Mentor');
-              setNewMentor({ name: '', email: '', phone: '', employee_id: generateEmployeeId(users), major_course: '', assigned_courses: [], status: 'active' });
+              setNewMentor({ name: '', email: '', phone: '', employee_id: generateEmployeeId(users), major_course: '', password: '', assigned_courses: [], status: 'active' });
               setIsAddModalOpen(true); 
             }}
             className="bg-blue-600 text-white px-5 py-2.5 rounded-md flex items-center hover:bg-blue-700 transition-colors shadow-sm font-black uppercase text-xs tracking-wider"
           >
             <Plus size={16} className="mr-2" />
-            Create User
+            Add Mentor
           </button>
         </div>
       </div>
@@ -610,11 +818,37 @@ CONFIDENTIAL & PROPRIETARY
                   <input type="tel" value={newMentor.phone} onChange={(e) => setNewMentor({...newMentor, phone: e.target.value})} className="w-full px-3 py-2 border rounded-md" placeholder="+1 (555) 000-0000" />
                 </div>
                 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                  <input type="text" value={newMentor.password} onChange={(e) => setNewMentor({...newMentor, password: e.target.value})} className="w-full px-3 py-2 border rounded-md" placeholder="Leave blank to auto-generate" />
+                </div>
                 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Major Course</label>
+                  <input type="text" required value={newMentor.major_course} onChange={(e) => setNewMentor({...newMentor, major_course: e.target.value})} className="w-full px-3 py-2 border rounded-md" />
+                </div>
                 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Course(s)</label>
+                  <div className="border rounded-md border-gray-300 p-3 max-h-48 overflow-y-auto space-y-2 bg-gray-50">
+                    {courses.map(c => (
+                      <label key={c.id} className="flex items-center space-x-3 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
+                        <input 
+                          type="checkbox" 
+                          checked={(newMentor.assigned_courses || []).includes(c.id)}
+                          onChange={() => toggleCourseAssignment(c.id, false)}
+                          className="h-4 w-4 text-indigo-600 rounded border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-gray-900">{c.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <div className="pt-4 flex justify-end space-x-3 border-t border-gray-100 mt-4">
                   <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 border rounded-md font-medium text-gray-700">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700">Save Mentor</button>
+                  <button type="submit" disabled={isSavingMentor} className="px-4 py-2 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 disabled:opacity-70 flex items-center">
+                    {isSavingMentor ? <><Loader2 size={16} className="animate-spin mr-2" /> Saving...</> : 'Save Mentor'}
+                  </button>
                 </div>
               </form>
             ) : (
@@ -630,6 +864,10 @@ CONFIDENTIAL & PROPRIETARY
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                   <input type="tel" value={newStudent.phone} onChange={(e) => setNewStudent({...newStudent, phone: e.target.value})} className="w-full px-3 py-2 border rounded-md" placeholder="+1 (555) 000-0000" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                  <input type="text" value={newStudent.password} onChange={(e) => setNewStudent({...newStudent, password: e.target.value})} className="w-full px-3 py-2 border rounded-md" placeholder="Leave blank to auto-generate" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Course of Study *</label>

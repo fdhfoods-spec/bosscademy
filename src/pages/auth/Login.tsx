@@ -23,7 +23,7 @@ export default function Login() {
       } else if (user.role === 'Admin') {
         navigate('/admin/dashboard');
       } else {
-        navigate('/student/enrollment');
+        navigate('/student/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during login');

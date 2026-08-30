@@ -30,15 +30,16 @@ export default function AdminCertificates() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('certificates')
-      .select('*')
-      .order('issued_at', { ascending: false });
-      
-    if (error) {
+    try {
+      const res = await fetch('/api/get-certificates');
+      if (res.ok) {
+        const data = await res.json();
+        setCertificates(data.certificates || []);
+      } else {
+        console.error('Failed to fetch certificates via API');
+      }
+    } catch (error) {
       console.error('Error fetching certificates:', error);
-    } else {
-      setCertificates(data || []);
     }
     setIsLoading(false);
   };
@@ -85,16 +86,20 @@ export default function AdminCertificates() {
       return;
     }
 
-    const { error } = await supabase
-      .from('certificates')
-      .insert([newCertificate]);
+    try {
+      const res = await fetch('/api/manage-certificates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert', certificates: [newCertificate] })
+      });
       
-    if (error) {
-      alert('Failed to issue certificate: ' + error.message);
-    } else {
+      if (!res.ok) throw new Error('Failed to issue certificate');
+      
       setIsModalOpen(false);
       setNewCert({ recipientName: '', recipientEmail: '', type: 'PROJECT', program: '' });
       fetchCertificates();
+    } catch (error: any) {
+      alert('Failed to issue certificate: ' + error.message);
     }
     setIsUpdating(false);
   };
@@ -163,15 +168,19 @@ export default function AdminCertificates() {
           return;
         }
 
-        const { error } = await supabase
-          .from('certificates')
-          .insert(newCertificates);
+        try {
+          const res = await fetch('/api/manage-certificates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'bulk_insert', certificates: newCertificates })
+          });
           
-        if (error) {
-          alert('Failed to bulk issue certificates: ' + error.message);
-        } else {
+          if (!res.ok) throw new Error('Failed to bulk issue certificates');
+          
           alert(`Successfully issued ${newCertificates.length} certificates from CSV!`);
           fetchCertificates();
+        } catch (error: any) {
+          alert('Failed to bulk issue certificates: ' + error.message);
         }
         setIsUpdating(false);
       } else {

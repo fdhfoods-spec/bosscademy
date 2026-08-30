@@ -29,9 +29,10 @@ import MentorStudents from './pages/mentor/Students';
 import MentorCertificates from './pages/mentor/Certificates';
 
 // Student Pages
-import StudentEnrollment from './pages/student/Enrollment';
+import StudentDashboard from './pages/student/Dashboard';
 import StudentCertificates from './pages/student/Certificates';
 import StudentCourseView from './pages/student/CourseView';
+import StudentPaymentHistory from './pages/student/PaymentHistory';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: Role[] }) => {
   const { user, loading } = useAuth();
@@ -68,7 +69,6 @@ function AppRoutes() {
       <Route path="/student/login" element={<Navigate to="/login" replace />} />
       <Route path="/mentor/register" element={<MentorRegister />} />
       <Route path="/student/register" element={<StudentRegister />} />
-      <Route path="/student/payment" element={<StudentPayment />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       
@@ -103,8 +103,10 @@ function AppRoutes() {
           <DashboardLayout />
         </ProtectedRoute>
       }>
-        <Route path="enrollment" element={<StudentEnrollment />} />
+        <Route path="dashboard" element={<StudentDashboard />} />
         <Route path="certificates" element={<StudentCertificates />} />
+        <Route path="payment" element={<StudentPayment />} />
+        <Route path="payments" element={<StudentPaymentHistory />} />
       </Route>
 
       {/* Student Full Screen Routes */}

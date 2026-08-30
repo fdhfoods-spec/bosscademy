@@ -30,7 +30,7 @@ export default function MentorStudents() {
           const allUsers = getMockUsers();
           
           // Find mentor's courses
-          const mentorCourses = allCourses.filter(c => (user.assigned_courses || []).includes(c.id));
+          const mentorCourses = allCourses.filter(c => c.mentor_id === user.id);
           const courseIds = mentorCourses.map(c => c.id);
           
           // Find enrollments for these courses
@@ -60,7 +60,7 @@ export default function MentorStudents() {
         const { data: coursesData } = await supabase
           .from('courses')
           .select('id, title')
-          .in('id', user.assigned_courses || []);
+          .eq('mentor_id', user.id);
           
         const courses = coursesData || [];
         const courseIds = courses.map(c => c.id);
@@ -73,18 +73,35 @@ export default function MentorStudents() {
 
         const { data: enrData } = await supabase
           .from('enrollments')
-          .select('id, student_id, status, enrolled_at, progress, profiles(name, email), courses(title)')
+          .select('id, student_id, status, enrolled_at, progress, courses(title)')
           .in('course_id', courseIds)
           .order('enrolled_at', { ascending: false });
           
-        const mapped = (enrData || []).map((enr: any) => ({
-          id: enr.id,
-          studentName: enr.profiles?.name || 'Unknown',
-          studentEmail: enr.profiles?.email || 'N/A',
-          courseName: enr.courses?.title || 'Unknown',
-          progress: enr.progress || 0,
-          lastActivity: enr.enrolled_at
-        }));
+        // Fetch profiles via proxy to bypass RLS for Mentors
+        let allProfiles: any[] = [];
+        try {
+          const profilesRes = await fetch('/api/get-users');
+          if (profilesRes.ok) {
+            const profilesData = await profilesRes.json();
+            allProfiles = profilesData.profiles || [];
+          }
+        } catch (e) {
+          console.error("Failed to fetch profiles for names", e);
+        }
+        
+        const profileMap = new Map(allProfiles.map(p => [p.id, p]));
+          
+        const mapped = (enrData || []).map((enr: any) => {
+          const profile = profileMap.get(enr.student_id);
+          return {
+            id: enr.id,
+            studentName: profile?.name || 'Unknown',
+            studentEmail: profile?.email || 'N/A',
+            courseName: enr.courses?.title || 'Unknown',
+            progress: enr.progress || 0,
+            lastActivity: enr.enrolled_at
+          };
+        });
         
         setStudents(mapped);
       } catch (error) {

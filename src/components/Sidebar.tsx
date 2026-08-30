@@ -34,7 +34,8 @@ export default function Sidebar({ role, isOpen, setIsOpen }: SidebarProps) {
   ];
 
   const studentLinks = [
-    { to: '/student/enrollment', icon: <BookOpen size={20} />, label: 'Enrollment' },
+    { to: '/student/dashboard', icon: <Home size={20} />, label: 'Dashboard' },
+    { to: '/student/payments', icon: <Book size={20} />, label: 'Payment History' },
     { to: '/student/certificates', icon: <Award size={20} />, label: 'Certificates' },
   ];
 

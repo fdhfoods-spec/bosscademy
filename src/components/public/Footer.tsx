@@ -53,7 +53,6 @@ export default function Footer() {
                   Home
                 </Link>
               </li>
-
               <li>
                 <Link to="/partnerships" className={linkClass}>
                   Partnerships
@@ -62,6 +61,21 @@ export default function Footer() {
               <li>
                 <Link to="/contact" className={linkClass}>
                   Contact
+                </Link>
+              </li>
+              <li>
+                <Link to="/student/register" className={linkClass}>
+                  Student Registration
+                </Link>
+              </li>
+              <li>
+                <Link to="/mentor/register" className={linkClass}>
+                  Become a Mentor
+                </Link>
+              </li>
+              <li>
+                <Link to="/login" className={linkClass}>
+                  Login Portal
                 </Link>
               </li>
             </ul>

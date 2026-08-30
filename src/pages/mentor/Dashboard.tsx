@@ -34,7 +34,7 @@ export default function MentorDashboard() {
       try {
         if (IS_MOCK_SUPABASE) {
           const allCourses = getMockCourses();
-          const mentorCourses = allCourses.filter(c => (user.assigned_courses || []).includes(c.id));
+          const mentorCourses = allCourses.filter(c => c.mentor_id === user.id);
           
           const allEnrollments = getMockEnrollments();
           const courseIds = mentorCourses.map(c => c.id);
@@ -61,7 +61,7 @@ export default function MentorDashboard() {
         const { data: coursesData } = await supabase
           .from('courses')
           .select('*')
-          .in('id', user.assigned_courses || []);
+          .eq('mentor_id', user.id);
           
         const courses = (coursesData as Course[]) || [];
         const courseIds = courses.map(c => c.id);
