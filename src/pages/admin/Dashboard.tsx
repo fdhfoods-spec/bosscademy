@@ -100,13 +100,11 @@ export default function AdminDashboard() {
       const [
         { data: coursesData, error: coursesErr },
         { data: usersData, error: usersErr },
-        { data: enrollmentsData, error: enrollErr },
-        { data: paymentsData }
+        { data: enrollmentsData, error: enrollErr }
       ] = await Promise.all([
         supabase.from('courses').select('*'),
         supabase.from('profiles').select('*'),
-        supabase.from('enrollments').select('*'),
-        supabase.from('payments').select('*')
+        supabase.from('enrollments').select('*')
       ]);
 
       if (coursesErr) throw coursesErr;
@@ -116,7 +114,7 @@ export default function AdminDashboard() {
       const allCourses = coursesData || [];
       const allUsers = usersData || [];
       const allEnrollments = enrollmentsData || [];
-      const allPayments = paymentsData || [];
+      const allPayments: any[] = [];
 
       const students = allUsers.filter(u => u.role === 'Student');
       const mentors = allUsers.filter(u => u.role === 'Mentor');
