@@ -155,8 +155,7 @@ CONFIDENTIAL & PROPRIETARY
           phone: newStudent.phone || null,
           course: newStudent.course || null,
           role: 'Student',
-          status: newStudent.status,
-          reset_token: token
+          status: newStudent.status
         };
 
         const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
@@ -240,8 +239,7 @@ CONFIDENTIAL & PROPRIETARY
           role: 'Mentor',
           status: newMentor.status,
           employee_id: newMentor.employee_id || null,
-          major_course: newMentor.major_course || null,
-          reset_token: token
+          major_course: newMentor.major_course || null
         };
 
         const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
