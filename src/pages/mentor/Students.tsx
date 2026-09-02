@@ -77,13 +77,12 @@ export default function MentorStudents() {
           .in('course_id', courseIds)
           .order('enrolled_at', { ascending: false });
           
-        // Fetch profiles via proxy to bypass RLS for Mentors
+        // Fetch profiles via supabase
         let allProfiles: any[] = [];
         try {
-          const profilesRes = await fetch('/api/get-users');
-          if (profilesRes.ok) {
-            const profilesData = await profilesRes.json();
-            allProfiles = profilesData.profiles || [];
+          const { data: profilesData, error } = await supabase.from('profiles').select('*');
+          if (!error && profilesData) {
+            allProfiles = profilesData;
           }
         } catch (e) {
           console.error("Failed to fetch profiles for names", e);
