@@ -104,7 +104,7 @@ export default function AdminDashboard() {
         { data: paymentsData }
       ] = await Promise.all([
         supabase.from('courses').select('*'),
-        supabase.from('users').select('*'),
+        supabase.from('profiles').select('*'),
         supabase.from('enrollments').select('*'),
         supabase.from('payments').select('*')
       ]);
