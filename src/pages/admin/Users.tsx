@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon } from 'lucide-react';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
-
+import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
 import type { User, Course } from '../../types';
 import { getMockUsers, setMockUsers, getMockCourses, syncStudentEnrollments } from '../../lib/mockData';
 
@@ -61,19 +60,9 @@ CONFIDENTIAL & PROPRIETARY
 © 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
     
     try {
-      const response = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: profile.email, subject, text })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        showNotification(`${profile.role} created successfully! Registration email sent.`, 'success');
-      } else {
-        showNotification(`${profile.role} created, but failed to send email: ${result.error}`, 'error');
-      }
+      // Mocking email send
+      console.log('Sending email:', { to: profile.email, subject, text });
+      showNotification(`${profile.role} created successfully! Registration email sent (Mocked).`, 'success');
     } catch (err: any) {
       console.error(err);
       showNotification(`${profile.role} created, but error connecting to email service.`, 'error');
@@ -101,27 +90,18 @@ CONFIDENTIAL & PROPRIETARY
     }
 
     try {
-      // Because the Admin is a hardcoded mock user in AuthContext, they don't have a real Supabase Auth token.
-      // So querying directly from the frontend gets blocked by Row Level Security (RLS).
-      // We use a custom backend API that uses the Service Role Key to bypass RLS for the Admin.
-      const res = await fetch('/api/get-users');
-      if (!res.ok) throw new Error('Failed to fetch from backend API');
-      const backendData = await res.json();
+      const { data: profilesData, error: profilesError } = await supabase.from('profiles').select('*');
+      if (profilesError) throw profilesError;
       
-      // Fetch courses via proxy to avoid RLS
-      const coursesRes = await fetch('/api/get-all-courses');
-      let fetchedCourses: Course[] = [];
-      if (coursesRes.ok) {
-        const cData = await coursesRes.json();
-        fetchedCourses = cData.courses || [];
-        setCourses(fetchedCourses);
-      }
+      const { data: coursesData, error: coursesError } = await supabase.from('courses').select('*');
+      if (coursesError) throw coursesError;
       
-      if (backendData.profiles) {
-        // Map assigned_courses to Mentors from the fetched courses
-        const mappedProfiles = (backendData.profiles as User[]).map(user => {
+      setCourses(coursesData || []);
+      
+      if (profilesData) {
+        const mappedProfiles = (profilesData as User[]).map(user => {
           if (user.role === 'Mentor') {
-             user.assigned_courses = fetchedCourses.filter(c => c.mentor_id === user.id).map(c => c.id);
+             user.assigned_courses = (coursesData || []).filter(c => c.mentor_id === user.id).map(c => c.id);
           }
           return user;
         });
@@ -179,64 +159,26 @@ CONFIDENTIAL & PROPRIETARY
           phone: newStudent.phone || null,
           course: newStudent.course || null,
           role: 'Student',
-          status: newStudent.status
+          status: newStudent.status,
+          reset_token: token
         };
 
-        const createRes = await fetch('/api/create-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: newStudent.email, password: finalPassword, profileData: profileData })
-        });
+        const { data: newUser, error: createError } = await supabase.from('profiles').insert([profileData]).select().single();
 
-        if (!createRes.ok) {
-          const errData = await createRes.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to create student account');
+        if (createError) {
+          throw new Error(createError.message || 'Failed to create student account');
         }
 
-        const createData = await createRes.json();
-        const authUserId = createData.user?.user?.id || createData.user?.id || createData.id;
-
-        // Auto enroll if course is selected
-        if (newStudent.course) {
-          // Since the user is already created, we can just use the update API to sync their enrollment
-          await fetch('/api/update-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: authUserId,
-              isStudent: true,
-              studentCourseId: newStudent.course
-            })
-          });
+        // Add to enrollments if course selected
+        if (newStudent.course && newUser) {
+          await supabase.from('enrollments').insert([{
+            student_id: newUser.id,
+            course_id: newStudent.course,
+            status: 'active'
+          }]);
         }
 
-        const subject = 'Your Boss Academy Account Created';
-        const text = `HELLO ${newStudent.name.toUpperCase()},
-
-An administrator has created an account for you on the Boss Academy LMS.
-Your assigned role is: STUDENT.
-
-YOUR LOGIN DETAILS
-Email: ${newStudent.email}
-Password: ${finalPassword}
-
-Please log in using the details above and change your password immediately.
-${window.location.origin}/student/login
-
-CONFIDENTIAL & PROPRIETARY
-© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
-
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: newStudent.email, subject, text })
-          });
-          showNotification('Student created! A credentials email has been sent to them.', 'success');
-        } catch (emailErr) {
-          console.error("Failed to send credentials email:", emailErr);
-          showNotification('Student created! But failed to send credentials email.', 'error');
-        }
+        showNotification('Student created! Note: Email sending is currently disabled in UI.', 'success');
         
         setIsAddModalOpen(false);
         setNewStudent({ name: '', email: '', phone: '', course: '', password: '', status: 'active' });
@@ -293,13 +235,9 @@ CONFIDENTIAL & PROPRIETARY
 
     if (!IS_MOCK_SUPABASE) {
       try {
-        const firstName = newMentor.name.trim().split(' ')[0] || 'User';
-        const generatedPassword = `${firstName}@1001`;
-        const finalPassword = newMentor.password.trim() || generatedPassword;
         const email = newMentor.email;
         
         const profileData = {
-          // id is injected by backend
           name: newMentor.name,
           username: email,
           email: email,
@@ -307,63 +245,24 @@ CONFIDENTIAL & PROPRIETARY
           role: 'Mentor',
           status: newMentor.status,
           employee_id: newMentor.employee_id || null,
-          major_course: newMentor.major_course || null
+          major_course: newMentor.major_course || null,
+          reset_token: token
         };
 
-        const createRes = await fetch('/api/create-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email, password: finalPassword, profileData: profileData })
-        });
+        const { data: newUser, error: createError } = await supabase.from('profiles').insert([profileData]).select().single();
 
-        if (!createRes.ok) {
-          const errData = await createRes.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to create user account');
+        if (createError) {
+          throw new Error(createError.message || 'Failed to create user account');
         }
 
-        const createData = await createRes.json();
-        const authUserId = createData.user?.user?.id || createData.user?.id || createData.id;
-
-        // Automatically assign course if provided
-        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0) {
-          await fetch('/api/update-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: authUserId,
-              isMentor: true,
-              assignedCourses: newMentor.assigned_courses
-            })
-          });
+        // Assign courses if provided
+        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0 && newUser) {
+            for (const courseId of newMentor.assigned_courses) {
+                await supabase.from('courses').update({ mentor_id: newUser.id }).eq('id', courseId);
+            }
         }
 
-        const subject = 'Your Boss Academy Account Created';
-        const text = `HELLO ${newMentor.name.toUpperCase()},
-
-An administrator has created an account for you on the Boss Academy LMS.
-Your assigned role is: MENTOR.
-
-YOUR LOGIN DETAILS
-Email: ${email}
-Password: ${finalPassword}
-
-Please log in using the details above and change your password immediately.
-${window.location.origin}/mentor/login
-
-CONFIDENTIAL & PROPRIETARY
-© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
-
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: email, subject, text })
-          });
-          showNotification('Mentor created! A credentials email has been sent to them.', 'success');
-        } catch (emailErr) {
-          console.error("Failed to send credentials email:", emailErr);
-          showNotification('Mentor created! But failed to send credentials email.', 'error');
-        }
+        showNotification('Mentor created! Note: Email sending is currently disabled in UI.', 'success');
         
         await fetchData();
         setIsAddModalOpen(false);
@@ -421,22 +320,24 @@ CONFIDENTIAL & PROPRIETARY
           employee_id: editingUser.employee_id,
         };
 
-        const res = await fetch('/api/update-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: editingUser.id,
-            profileData: updateData,
-            assignedCourses: editingUser.assigned_courses,
-            isMentor: editingUser.role === 'Mentor',
-            isStudent: editingUser.role === 'Student',
-            studentCourseId: editingUser.course
-          })
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Update failed');
+        const { error: updateError } = await supabase.from('profiles').update(updateData).eq('id', editingUser.id);
+        
+        if (updateError) {
+          throw new Error(updateError.message || 'Update failed');
+        }
+        
+        if (editingUser.role === 'Student' && editingUser.course) {
+          await supabase.from('enrollments').upsert({
+            student_id: editingUser.id,
+            course_id: editingUser.course,
+            status: 'active'
+          }, { onConflict: 'student_id, course_id' });
+        }
+        
+        if (editingUser.role === 'Mentor' && editingUser.assigned_courses) {
+            for (const courseId of editingUser.assigned_courses) {
+                await supabase.from('courses').update({ mentor_id: editingUser.id }).eq('id', courseId);
+            }
         }
 
         await fetchData();
@@ -459,16 +360,10 @@ CONFIDENTIAL & PROPRIETARY
         showNotification('User deleted successfully!', 'success');
       } else {
         try {
-          // Send request to custom backend to safely delete auth.users record which cascades to profiles
-          const res = await fetch('/api/delete-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: deletingUserId })
-          });
+          const { error: deleteError } = await supabase.from('profiles').delete().eq('id', deletingUserId);
           
-          if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || 'Failed to delete user');
+          if (deleteError) {
+            throw new Error(deleteError.message || 'Failed to delete user');
           }
 
           await fetchData();
@@ -529,48 +424,16 @@ CONFIDENTIAL & PROPRIETARY
         showNotification('Failed to send email. Check your SMTP configuration.', 'error');
       }
     } else {
-      // Live Supabase - Bypass Supabase rate limits with custom Admin API route
       try {
-        const linkRes = await fetch('/api/generate-reset-link', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailPreviewUser.email })
+        const { error } = await supabase.auth.resetPasswordForEmail(emailPreviewUser.email, {
+          redirectTo: `${window.location.origin}/reset-password`,
         });
         
-        const linkData = await linkRes.json();
-        
-        if (!linkRes.ok) {
-          throw new Error(linkData.error || 'Failed to generate secure reset link');
+        if (error) {
+          throw new Error(error.message || 'Failed to generate secure reset link');
         }
 
-        const subject = 'Your Boss LMS Account Setup';
-        const text = `HELLO ${emailPreviewUser.name.toUpperCase()},
-
-An administrator has requested a password setup link for your Boss Academy LMS account.
-Your assigned role is: ${emailPreviewUser.role.toUpperCase()} .
-
-YOUR LOGIN DETAILS
-Email: ${emailPreviewUser.email}
-
-To access your account, you need to set up a secure password. Click the link below to get started:
-${linkData.action_link}
-
-Note: This link will expire in 24 hours. If it expires, please contact your administrator.
-
-CONFIDENTIAL & PROPRIETARY
-© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
-
-        const emailRes = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: emailPreviewUser.email, subject, text })
-        });
-        
-        if (!emailRes.ok) {
-          throw new Error('Failed to send email. Check your SMTP configuration.');
-        }
-
-        showNotification(`Credential email sent to ${emailPreviewUser.email}`, 'success');
+        showNotification(`Credential reset email sent to ${emailPreviewUser.email} via Supabase`, 'success');
       } catch (err: any) {
         showNotification(err.message, 'error');
       }

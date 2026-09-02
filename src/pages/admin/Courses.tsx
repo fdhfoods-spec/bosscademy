@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye, Check } from 'lucide-react';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
 import type { Course, User as UserType } from '../../types';
 import { getMockCourses, setMockCourses, getMockUsers, setMockUsers } from '../../lib/mockData';
 
@@ -60,10 +60,11 @@ export default function AdminCourses() {
       setCourses(mockDb.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     } else {
       try {
-        const res = await fetch('/api/get-all-courses');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.courses) setCourses(data.courses as Course[]);
+        const { data: coursesData, error } = await supabase.from('courses').select('*');
+        if (error) {
+          console.error('Failed to fetch courses:', error);
+        } else {
+          setCourses(coursesData || []);
         }
       } catch (err) {
         console.error('Failed to fetch courses:', err);
@@ -82,17 +83,16 @@ export default function AdminCourses() {
     }
 
     try {
-      const res = await fetch('/api/get-users');
-      if (res.ok) {
-        const backendData = await res.json();
-        if (backendData.profiles) {
-          setAllUsers(backendData.profiles as UserType[]);
-          const dbMentors = backendData.profiles.filter((u: any) => u.role === 'Mentor');
-          setMentors(dbMentors.map((m: any) => ({ id: m.id, name: m.name, email: m.email })));
-        }
+      const { data: profiles, error } = await supabase.from('profiles').select('*');
+      if (error) {
+        console.error('Failed to fetch mentors:', error);
+      } else if (profiles) {
+        setAllUsers(profiles as UserType[]);
+        const dbMentors = profiles.filter((u: any) => u.role === 'Mentor');
+        setMentors(dbMentors.map((m: any) => ({ id: m.id, name: m.name, email: m.email })));
       }
     } catch (err) {
-      console.error('Failed to fetch mentors from backend API', err);
+      console.error('Failed to fetch mentors:', err);
     }
   };
 
@@ -153,15 +153,8 @@ export default function AdminCourses() {
       showNotification('Course created successfully!', 'success');
     } else {
       try {
-        const res = await fetch('/api/create-course', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseData: newCourse })
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to insert course');
-        }
+        const { error } = await supabase.from('courses').insert([newCourse]);
+        if (error) throw error;
         
         await fetchCourses();
         setIsCreateModalOpen(false);
@@ -189,12 +182,9 @@ export default function AdminCourses() {
       setCourses(updated);
     } else {
       try {
-        const res = await fetch('/api/delete-course', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
-        });
-        if (!res.ok) throw new Error('Failed to delete course');
+        const { error } = await supabase.from('courses').delete().eq('id', id);
+        if (error) throw error;
+        
         fetchCourses();
         setIsDeleteModalOpen(false);
         setCourseToDelete(null);
@@ -262,26 +252,21 @@ export default function AdminCourses() {
       showNotification('Course updated successfully!', 'success');
     } else {
       try {
-        const res = await fetch('/api/update-course', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingCourse.id,
-            courseData: {
-              title: editingCourse.title,
-              course_code: editingCourse.course_code,
-              description: editingCourse.description,
-              level: editingCourse.level,
-              thumbnail: editingCourse.thumbnail,
-              category: editingCourse.category,
-              status: editingCourse.status,
-              video_url: editingCourse.video_url,
-              mentor_id: editingCourse.mentor_id,
-              updated_at: new Date().toISOString()
-            }
-          })
-        });
-        if (!res.ok) throw new Error('Failed to update course');
+        const { error } = await supabase.from('courses').update({
+          title: editingCourse.title,
+          course_code: editingCourse.course_code,
+          description: editingCourse.description,
+          level: editingCourse.level,
+          thumbnail: editingCourse.thumbnail,
+          category: editingCourse.category,
+          status: editingCourse.status,
+          video_url: editingCourse.video_url,
+          mentor_id: editingCourse.mentor_id,
+          updated_at: new Date().toISOString()
+        }).eq('id', editingCourse.id);
+        
+        if (error) throw error;
+        
         fetchCourses();
         setEditingCourse(null);
         setIsUpdating(false);

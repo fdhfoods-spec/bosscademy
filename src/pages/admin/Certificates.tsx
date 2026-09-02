@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Award, Search, X, Loader2, CheckCircle, Download } from 'lucide-react';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
 import type { Certificate } from '../../types';
 import CertificateModal from '../../components/CertificateModal';
 
@@ -31,12 +31,11 @@ export default function AdminCertificates() {
     }
 
     try {
-      const res = await fetch('/api/get-certificates');
-      if (res.ok) {
-        const data = await res.json();
-        setCertificates(data.certificates || []);
+      const { data, error } = await supabase.from('certificates').select('*').order('issued_at', { ascending: false });
+      if (error) {
+        console.error('Failed to fetch certificates from Supabase:', error);
       } else {
-        console.error('Failed to fetch certificates via API');
+        setCertificates(data || []);
       }
     } catch (error) {
       console.error('Error fetching certificates:', error);
@@ -87,13 +86,9 @@ export default function AdminCertificates() {
     }
 
     try {
-      const res = await fetch('/api/manage-certificates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'insert', certificates: [newCertificate] })
-      });
+      const { error } = await supabase.from('certificates').insert([newCertificate]);
       
-      if (!res.ok) throw new Error('Failed to issue certificate');
+      if (error) throw error;
       
       setIsModalOpen(false);
       setNewCert({ recipientName: '', recipientEmail: '', type: 'PROJECT', program: '' });
@@ -169,13 +164,9 @@ export default function AdminCertificates() {
         }
 
         try {
-          const res = await fetch('/api/manage-certificates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'bulk_insert', certificates: newCertificates })
-          });
+          const { error } = await supabase.from('certificates').insert(newCertificates);
           
-          if (!res.ok) throw new Error('Failed to bulk issue certificates');
+          if (error) throw error;
           
           alert(`Successfully issued ${newCertificates.length} certificates from CSV!`);
           fetchCertificates();
