@@ -8,9 +8,6 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-a
 export const IS_MOCK_SUPABASE = supabaseUrl.includes('placeholder');
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// For Admin pages only, to bypass RLS since Admin is a mock user without a real Supabase auth token.
-// Note: In a production app, the Service Role Key should never be exposed to the client.
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-export const supabaseAdmin = supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey) 
-  : supabase;
+// Reverting to Anon Key because Supabase SDK strictly forbids Service Role Keys in the browser.
+// To view data in the Admin panel with the mock login, you MUST disable RLS in your Supabase Dashboard.
+export const supabaseAdmin = supabase;
