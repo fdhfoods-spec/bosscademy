@@ -58,121 +58,44 @@ export default function Payment() {
     setErrorMsg('');
 
     try {
-      // 1. Create order on the backend
-      const orderRes = await fetch('/api/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: course.id,
-          amount: COURSE_FEE,
-          currency: 'INR'
-        })
-      });
+      // Direct Supabase Payment Processing (Bypassing Razorpay for Vercel without backend)
+      const paymentId = crypto.randomUUID();
       
-      const orderData = await orderRes.json();
-      
-      if (!orderRes.ok || !orderData.id) {
-        throw new Error(orderData.error || 'Failed to create payment order');
-      }
-
-      // 2. Open Razorpay Checkout
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'dummy_key',
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "BOSS Academy",
-        description: `Enrollment for ${course.title}`,
-        order_id: orderData.id,
-        handler: async function (response: any) {
-          await verifyPayment(response, orderData);
-        },
-        prefill: {
-          name: user.name,
-          email: user.email,
-          contact: user.phone || '9999999999'
-        },
-        theme: {
-          color: "#2563eb" // blue-600
-        }
+      const paymentRecord = {
+        id: paymentId,
+        student_id: user.id,
+        course_id: course.id,
+        amount: COURSE_FEE,
+        currency: 'INR',
+        status: 'successful'
       };
 
-      const rzp = new window.Razorpay(options);
-      
-      rzp.on('payment.failed', function (response: any) {
-        setIsProcessing(false);
-        setPaymentStatus('failed');
-        setErrorMsg(response.error.description || 'Payment failed. Please try again.');
-      });
-      
-      rzp.open();
+      // 1. Record Payment
+      const { error: paymentError } = await supabase.from('payments').insert([paymentRecord]);
 
+      if (paymentError) throw new Error('Payment failed to record: ' + paymentError.message);
+
+      // 2. Create Enrollment
+      const { error: enrollError } = await supabase.from('enrollments').insert([{
+        student_id: user.id,
+        course_id: course.id,
+        payment_id: paymentId,
+        status: 'active'
+      }]);
+
+      if (enrollError) throw new Error('Enrollment failed: ' + enrollError.message);
+
+      setPaymentDetails(paymentRecord);
+      setPaymentStatus('success');
+      setTimeout(() => navigate(`/student/course/${course.id}`), 2000);
+      
     } catch (err: any) {
       setIsProcessing(false);
       setPaymentStatus('failed');
-      setErrorMsg(err.message || 'Network error while initiating payment.');
+      setErrorMsg(err.message || 'Payment processing failed.');
     }
   };
 
-  const verifyPayment = async (response: any, _orderData: any) => {
-    try {
-      // 3. Verify signature on the backend
-      const verifyRes = await fetch('/api/verify-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature
-        })
-      });
-
-      const verifyData = await verifyRes.json();
-      
-      if (verifyRes.ok && verifyData.success) {
-        // 4. Verification successful, record payment and enrollment
-        await completeEnrollment(response.razorpay_order_id, response.razorpay_payment_id);
-      } else {
-        throw new Error(verifyData.error || 'Payment verification failed');
-      }
-    } catch (err: any) {
-      setIsProcessing(false);
-      setPaymentStatus('failed');
-      setErrorMsg(err.message || 'Payment verification failed.');
-    }
-  };
-
-  const completeEnrollment = async (orderId: string, paymentId: string) => {
-    if (!user || !course) return;
-
-    const newPayment = {
-      id: crypto.randomUUID(),
-      student_id: user.id,
-      course_id: course.id,
-      order_id: orderId,
-      payment_id: paymentId,
-      amount: COURSE_FEE,
-      currency: 'INR',
-      status: 'successful' as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    const newEnrollment = {
-      id: crypto.randomUUID(),
-      student_id: user.id,
-      course_id: course.id,
-      enrolled_at: new Date().toISOString(),
-      status: 'active' as const,
-      progress: 0
-    };
-
-    await supabase.from('payments').insert([newPayment]);
-    await supabase.from('enrollments').insert([newEnrollment]);
-
-    setPaymentDetails(newPayment);
-    setPaymentStatus('success');
-    setIsProcessing(false);
-  };
 
   if (isLoading) {
     return (

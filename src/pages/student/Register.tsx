@@ -78,91 +78,52 @@ export default function Register() {
     const price = selectedCourse.price || 4999; // Default price if missing
 
     try {
-      // 1. Create order on the backend
-      const orderRes = await fetch('/api/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: selectedCourse.id,
-          amount: price,
-          currency: 'INR'
-        })
-      });
-      
-      const orderData = await orderRes.json();
-      
-      if (!orderRes.ok || !orderData.id) {
-        throw new Error(orderData.error || 'Failed to create payment order');
-      }
-
-      // 2. Open Razorpay Checkout
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'dummy_key',
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "BOSS Academy",
-        description: `Enrollment for ${selectedCourse.title}`,
-        order_id: orderData.id,
-        handler: async function (response: any) {
-          await verifyPaymentAndRegister(response, orderData);
-        },
-        prefill: {
-          name: formData.name,
-          email: formData.email,
-          contact: formData.phone || '9999999999'
-        },
-        theme: {
-          color: "#2563eb" // blue-600
-        }
-      };
-
-      const rzp = new window.Razorpay(options);
-      
-      rzp.on('payment.failed', function (response: any) {
-        setError(`Payment failed: ${response.error.description}`);
-        setIsLoading(false);
+      // Direct Supabase Registration (Bypassing Razorpay for Vercel without backend)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
       });
 
-      rzp.open();
+      if (authError) throw new Error(authError.message);
+      
+      const userId = authData.user?.id;
+      if (!userId) throw new Error('Registration failed');
 
-    } catch (err: any) {
-      setError(err.message || 'Payment initialization failed.');
-      setIsLoading(false);
-    }
-  };
+      // Create Profile
+      const { error: profileError } = await supabase.from('profiles').insert([{
+        id: userId,
+        name: formData.name,
+        email: formData.email,
+        username: formData.email,
+        phone: formData.phone,
+        role: 'Student',
+        status: 'active'
+      }]);
 
-  const verifyPaymentAndRegister = async (paymentResponse: any, orderData: any) => {
-    setStep(3);
-    setError(null);
+      if (profileError) throw new Error('Failed to create profile: ' + profileError.message);
 
-    try {
-      const verifyRes = await fetch('/api/complete-student-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentInfo: {
-            razorpay_order_id: paymentResponse.razorpay_order_id,
-            razorpay_payment_id: paymentResponse.razorpay_payment_id,
-            razorpay_signature: paymentResponse.razorpay_signature,
-            amount: orderData.amount / 100, // convert paise to INR
-            currency: orderData.currency
-          },
-          studentInfo: formData
-        })
-      });
+      // Create mock payment record
+      const paymentId = crypto.randomUUID();
+      await supabase.from('payments').insert([{
+        id: paymentId,
+        student_id: userId,
+        course_id: selectedCourse.id,
+        amount: price,
+        currency: 'INR',
+        status: 'successful'
+      }]);
 
-      const verifyData = await verifyRes.json();
-
-      if (!verifyRes.ok) {
-        throw new Error(verifyData.error || 'Registration verification failed');
-      }
+      // Create Enrollment
+      await supabase.from('enrollments').insert([{
+        student_id: userId,
+        course_id: selectedCourse.id,
+        payment_id: paymentId,
+        status: 'active'
+      }]);
 
       setStep(4);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Payment verified, but registration failed. Please contact support.');
-      setStep(2); // Go back to summary to show error
-    } finally {
+      setError(err.message || 'Registration failed.');
       setIsLoading(false);
     }
   };
