@@ -4,7 +4,7 @@ import {
   Users, BookOpen, Award, TrendingUp, Loader2, DollarSign, 
   Clock, Plus, Activity, CheckCircle, XCircle, ArrowRight 
 } from 'lucide-react';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
 import { getMockCourses, getMockUsers, getMockEnrollments } from '../../lib/mockData';
 
 interface DashboardData {
@@ -96,78 +96,93 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Fetch from real database via proxy
-      const [statsRes, activityRes] = await Promise.all([
-        fetch('/api/dashboard-stats'),
-        fetch('/api/recent-activity')
+      // Fetch from real database via Supabase
+      const [
+        { data: coursesData, error: coursesErr },
+        { data: usersData, error: usersErr },
+        { data: enrollmentsData, error: enrollErr },
+        { data: paymentsData }
+      ] = await Promise.all([
+        supabase.from('courses').select('*'),
+        supabase.from('users').select('*'),
+        supabase.from('enrollments').select('*'),
+        supabase.from('payments').select('*')
       ]);
 
-      if (!statsRes.ok) {
-        const errText = await statsRes.text();
-        throw new Error(`Failed to fetch dashboard stats (Status: ${statsRes.status}): ${errText}`);
-      }
-      if (!activityRes.ok) {
-        const errText = await activityRes.text();
-        throw new Error(`Failed to fetch recent activity (Status: ${activityRes.status}): ${errText}`);
-      }
+      if (coursesErr) throw coursesErr;
+      if (usersErr) throw usersErr;
+      if (enrollErr) throw enrollErr;
 
-      const stats = await statsRes.json();
-      const activityData = await activityRes.json();
+      const allCourses = coursesData || [];
+      const allUsers = usersData || [];
+      const allEnrollments = enrollmentsData || [];
+      const allPayments = paymentsData || [];
 
-      // Normalize activity feed chronologically
+      const students = allUsers.filter(u => u.role === 'Student');
+      const mentors = allUsers.filter(u => u.role === 'Mentor');
+      const publishedCourses = allCourses.filter(c => c.status === 'Published' || c.status === 'Active');
+      const archivedCourses = allCourses.filter(c => c.status === 'Archived');
+
+      let totalRevenue = 0;
+      let pendingPayments = 0;
+
+      allPayments.forEach(p => {
+        if (p.status === 'successful') {
+          totalRevenue += p.amount || 0;
+        } else if (p.status === 'pending') {
+          pendingPayments++;
+        }
+      });
+
       const activities: ActivityItem[] = [];
-      
-      if (activityData.users) {
-        activityData.users.forEach((u: any) => {
-          activities.push({
-            id: `u-${u.id}`,
-            type: 'user',
-            title: `New ${u.role} Joined`,
-            subtitle: u.name,
-            date: u.created_at
-          });
-        });
-      }
 
-      if (activityData.enrollments) {
-        activityData.enrollments.forEach((e: any) => {
-          activities.push({
-            id: `e-${e.id}`,
-            type: 'enrollment',
-            title: 'Course Enrollment',
-            subtitle: `Student ${e.student_id.substring(0,6)}... enrolled in Course ${e.course_id.substring(0,6)}...`,
-            date: e.enrolled_at,
-            status: e.status
-          });
+      allUsers.forEach(u => {
+        activities.push({
+          id: `u-${u.id}`,
+          type: 'user',
+          title: `New ${u.role} Joined`,
+          subtitle: u.name,
+          date: u.created_at || new Date().toISOString()
         });
-      }
+      });
 
-      if (activityData.payments) {
-        activityData.payments.forEach((p: any) => {
-          activities.push({
-            id: `p-${p.id}`,
-            type: 'payment',
-            title: 'Payment Processed',
-            subtitle: `Amount: ₹${p.amount}`,
-            date: p.created_at,
-            status: p.status,
-            amount: p.amount
-          });
+      allEnrollments.forEach(e => {
+        const student = allUsers.find(u => u.id === e.student_id);
+        const course = allCourses.find(c => c.id === e.course_id);
+        activities.push({
+          id: `e-${e.id}`,
+          type: 'enrollment',
+          title: 'Course Enrollment',
+          subtitle: `${student?.name || 'A student'} enrolled in ${course?.title || 'a course'}`,
+          date: e.enrolled_at || new Date().toISOString(),
+          status: e.status
         });
-      }
+      });
+
+      allPayments.forEach(p => {
+        activities.push({
+          id: `p-${p.id}`,
+          type: 'payment',
+          title: 'Payment Processed',
+          subtitle: `Amount: ₹${p.amount}`,
+          date: p.created_at || new Date().toISOString(),
+          status: p.status,
+          amount: p.amount
+        });
+      });
 
       activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setData({
-        totalCourses: stats.totalCourses || 0,
-        activeCourses: stats.activeCourses || 0,
-        completedCourses: stats.completedCourses || 0,
-        totalStudents: stats.totalStudents || 0,
-        totalMentors: stats.totalMentors || 0,
-        totalEnrollments: stats.totalEnrollments || 0,
-        totalRevenue: stats.totalRevenue || 0,
-        pendingPayments: stats.pendingPayments || 0,
-        recentActivity: activities.slice(0, 10) // Top 10 most recent
+        totalCourses: allCourses.length,
+        activeCourses: publishedCourses.length,
+        completedCourses: archivedCourses.length,
+        totalStudents: students.length,
+        totalMentors: mentors.length,
+        totalEnrollments: allEnrollments.length,
+        totalRevenue: totalRevenue,
+        pendingPayments: pendingPayments,
+        recentActivity: activities.slice(0, 10)
       });
 
     } catch (err: any) {
