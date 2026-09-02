@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Award, Search, X, Loader2, CheckCircle, Download } from 'lucide-react';
-import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabaseAdmin } from '../../lib/supabase';
 import type { Certificate } from '../../types';
 import CertificateModal from '../../components/CertificateModal';
 
@@ -31,7 +31,7 @@ export default function AdminCertificates() {
     }
 
     try {
-      const { data, error } = await supabase.from('certificates').select('*').order('issued_at', { ascending: false });
+      const { data, error } = await supabaseAdmin.from('certificates').select('*').order('issued_at', { ascending: false });
       if (error) {
         console.error('Failed to fetch certificates from Supabase:', error);
       } else {
@@ -86,7 +86,7 @@ export default function AdminCertificates() {
     }
 
     try {
-      const { error } = await supabase.from('certificates').insert([newCertificate]);
+      const { error } = await supabaseAdmin.from('certificates').insert([newCertificate]);
       
       if (error) throw error;
       
@@ -164,7 +164,7 @@ export default function AdminCertificates() {
         }
 
         try {
-          const { error } = await supabase.from('certificates').insert(newCertificates);
+          const { error } = await supabaseAdmin.from('certificates').insert(newCertificates);
           
           if (error) throw error;
           

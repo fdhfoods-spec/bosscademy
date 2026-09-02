@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye, Check } from 'lucide-react';
-import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabaseAdmin } from '../../lib/supabase';
 import type { Course, User as UserType } from '../../types';
 import { getMockCourses, setMockCourses, getMockUsers, setMockUsers } from '../../lib/mockData';
 
@@ -60,7 +60,7 @@ export default function AdminCourses() {
       setCourses(mockDb.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     } else {
       try {
-        const { data: coursesData, error } = await supabase.from('courses').select('*');
+        const { data: coursesData, error } = await supabaseAdmin.from('courses').select('*');
         if (error) {
           console.error('Failed to fetch courses:', error);
         } else {
@@ -83,7 +83,7 @@ export default function AdminCourses() {
     }
 
     try {
-      const { data: profiles, error } = await supabase.from('profiles').select('*');
+      const { data: profiles, error } = await supabaseAdmin.from('profiles').select('*');
       if (error) {
         console.error('Failed to fetch mentors:', error);
       } else if (profiles) {
@@ -153,7 +153,7 @@ export default function AdminCourses() {
       showNotification('Course created successfully!', 'success');
     } else {
       try {
-        const { error } = await supabase.from('courses').insert([newCourse]);
+        const { error } = await supabaseAdmin.from('courses').insert([newCourse]);
         if (error) throw error;
         
         await fetchCourses();
@@ -182,7 +182,7 @@ export default function AdminCourses() {
       setCourses(updated);
     } else {
       try {
-        const { error } = await supabase.from('courses').delete().eq('id', id);
+        const { error } = await supabaseAdmin.from('courses').delete().eq('id', id);
         if (error) throw error;
         
         fetchCourses();
@@ -252,7 +252,7 @@ export default function AdminCourses() {
       showNotification('Course updated successfully!', 'success');
     } else {
       try {
-        const { error } = await supabase.from('courses').update({
+        const { error } = await supabaseAdmin.from('courses').update({
           title: editingCourse.title,
           course_code: editingCourse.course_code,
           description: editingCourse.description,

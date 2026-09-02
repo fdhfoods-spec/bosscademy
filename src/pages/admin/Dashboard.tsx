@@ -4,7 +4,7 @@ import {
   Users, BookOpen, Award, TrendingUp, Loader2, DollarSign, 
   Clock, Plus, Activity, CheckCircle, XCircle, ArrowRight 
 } from 'lucide-react';
-import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabaseAdmin } from '../../lib/supabase';
 import { getMockCourses, getMockUsers, getMockEnrollments } from '../../lib/mockData';
 
 interface DashboardData {
@@ -102,9 +102,9 @@ export default function AdminDashboard() {
         { data: usersData, error: usersErr },
         { data: enrollmentsData, error: enrollErr }
       ] = await Promise.all([
-        supabase.from('courses').select('*'),
-        supabase.from('profiles').select('*'),
-        supabase.from('enrollments').select('*')
+        supabaseAdmin.from('courses').select('*'),
+        supabaseAdmin.from('profiles').select('*'),
+        supabaseAdmin.from('enrollments').select('*')
       ]);
 
       if (coursesErr) throw coursesErr;

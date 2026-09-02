@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon } from 'lucide-react';
-import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabaseAdmin } from '../../lib/supabase';
 import type { User, Course } from '../../types';
 import { getMockUsers, setMockUsers, getMockCourses, syncStudentEnrollments } from '../../lib/mockData';
 
@@ -90,10 +90,10 @@ CONFIDENTIAL & PROPRIETARY
     }
 
     try {
-      const { data: profilesData, error: profilesError } = await supabase.from('profiles').select('*');
+      const { data: profilesData, error: profilesError } = await supabaseAdmin.from('profiles').select('*');
       if (profilesError) throw profilesError;
       
-      const { data: coursesData, error: coursesError } = await supabase.from('courses').select('*');
+      const { data: coursesData, error: coursesError } = await supabaseAdmin.from('courses').select('*');
       if (coursesError) throw coursesError;
       
       setCourses(coursesData || []);
@@ -159,7 +159,7 @@ CONFIDENTIAL & PROPRIETARY
           reset_token: token
         };
 
-        const { data: newUser, error: createError } = await supabase.from('profiles').insert([profileData]).select().single();
+        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
 
         if (createError) {
           throw new Error(createError.message || 'Failed to create student account');
@@ -167,7 +167,7 @@ CONFIDENTIAL & PROPRIETARY
 
         // Add to enrollments if course selected
         if (newStudent.course && newUser) {
-          await supabase.from('enrollments').insert([{
+          await supabaseAdmin.from('enrollments').insert([{
             student_id: newUser.id,
             course_id: newStudent.course,
             status: 'active'
@@ -244,7 +244,7 @@ CONFIDENTIAL & PROPRIETARY
           reset_token: token
         };
 
-        const { data: newUser, error: createError } = await supabase.from('profiles').insert([profileData]).select().single();
+        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
 
         if (createError) {
           throw new Error(createError.message || 'Failed to create user account');
@@ -253,7 +253,7 @@ CONFIDENTIAL & PROPRIETARY
         // Assign courses if provided
         if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0 && newUser) {
             for (const courseId of newMentor.assigned_courses) {
-                await supabase.from('courses').update({ mentor_id: newUser.id }).eq('id', courseId);
+                await supabaseAdmin.from('courses').update({ mentor_id: newUser.id }).eq('id', courseId);
             }
         }
 
@@ -315,14 +315,14 @@ CONFIDENTIAL & PROPRIETARY
           employee_id: editingUser.employee_id,
         };
 
-        const { error: updateError } = await supabase.from('profiles').update(updateData).eq('id', editingUser.id);
+        const { error: updateError } = await supabaseAdmin.from('profiles').update(updateData).eq('id', editingUser.id);
         
         if (updateError) {
           throw new Error(updateError.message || 'Update failed');
         }
         
         if (editingUser.role === 'Student' && editingUser.course) {
-          await supabase.from('enrollments').upsert({
+          await supabaseAdmin.from('enrollments').upsert({
             student_id: editingUser.id,
             course_id: editingUser.course,
             status: 'active'
@@ -331,7 +331,7 @@ CONFIDENTIAL & PROPRIETARY
         
         if (editingUser.role === 'Mentor' && editingUser.assigned_courses) {
             for (const courseId of editingUser.assigned_courses) {
-                await supabase.from('courses').update({ mentor_id: editingUser.id }).eq('id', courseId);
+                await supabaseAdmin.from('courses').update({ mentor_id: editingUser.id }).eq('id', courseId);
             }
         }
 
@@ -355,7 +355,7 @@ CONFIDENTIAL & PROPRIETARY
         showNotification('User deleted successfully!', 'success');
       } else {
         try {
-          const { error: deleteError } = await supabase.from('profiles').delete().eq('id', deletingUserId);
+          const { error: deleteError } = await supabaseAdmin.from('profiles').delete().eq('id', deletingUserId);
           
           if (deleteError) {
             throw new Error(deleteError.message || 'Failed to delete user');
@@ -420,7 +420,7 @@ CONFIDENTIAL & PROPRIETARY
       }
     } else {
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(emailPreviewUser.email, {
+        const { error } = await supabaseAdmin.auth.resetPasswordForEmail(emailPreviewUser.email, {
           redirectTo: `${window.location.origin}/reset-password`,
         });
         
