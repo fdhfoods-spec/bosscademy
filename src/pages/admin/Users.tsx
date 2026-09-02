@@ -1,6 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon } from 'lucide-react';
 import { IS_MOCK_SUPABASE, supabaseAdmin } from '../../lib/supabase';
+
+// Helper to create Auth user directly via REST to bypass SDK "Forbidden" error for Service Role Key in browser
+const createAuthUser = async (email: string, password?: string) => {
+  const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+  
+  if (!serviceRoleKey || !baseUrl) {
+    throw new Error("Missing Supabase credentials in environment variables.");
+  }
+
+  const authRes = await fetch(`${baseUrl}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email,
+      password: password || `${email.split('@')[0]}@1001`,
+      email_confirm: true
+    })
+  });
+
+  const authData = await authRes.json();
+  if (!authRes.ok) {
+    throw new Error(authData.msg || authData.message || 'Failed to create auth user');
+  }
+
+  return authData.id;
+};
 import type { User, Course } from '../../types';
 import { getMockUsers, setMockUsers, getMockCourses, syncStudentEnrollments } from '../../lib/mockData';
 
@@ -148,7 +179,12 @@ CONFIDENTIAL & PROPRIETARY
 
     if (!IS_MOCK_SUPABASE) {
       try {
+        // 1. Create Auth User via REST first to get an ID
+        const userId = await createAuthUser(newStudent.email, newStudent.password);
+
+        // 2. Insert into Profiles with the new ID
         const profileData = {
+          id: userId,
           name: newStudent.name,
           username: newStudent.email,
           email: newStudent.email,
@@ -161,7 +197,7 @@ CONFIDENTIAL & PROPRIETARY
         const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
 
         if (createError) {
-          throw new Error(createError.message || 'Failed to create student account');
+          throw new Error(createError.message || 'Failed to create student profile');
         }
 
         // Add to enrollments if course selected
@@ -231,7 +267,14 @@ CONFIDENTIAL & PROPRIETARY
     if (!IS_MOCK_SUPABASE) {
       try {
         const email = newMentor.email;
+        if (!email) throw new Error("Email is required");
+
+        // 1. Create Auth User via REST first to get an ID
+        const userId = await createAuthUser(email, newMentor.password);
+
+        // 2. Insert into Profiles with the new ID
         const profileData = {
+          id: userId,
           name: newMentor.name,
           username: email,
           email: email,
@@ -245,7 +288,7 @@ CONFIDENTIAL & PROPRIETARY
         const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
 
         if (createError) {
-          throw new Error(createError.message || 'Failed to create user account');
+          throw new Error(createError.message || 'Failed to create mentor profile');
         }
 
         // Assign courses if provided
