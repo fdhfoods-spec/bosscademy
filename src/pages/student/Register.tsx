@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { BookOpen, User, Mail, Lock, Phone, AlertCircle, Loader2, CheckCircle, CreditCard, ArrowRight, ShieldCheck } from 'lucide-react';
-import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import type { Course } from '../../types';
 
 declare global {
@@ -11,7 +11,6 @@ declare global {
 }
 
 export default function Register() {
-  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1: Form, 2: Summary, 3: Processing, 4: Success
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(false);

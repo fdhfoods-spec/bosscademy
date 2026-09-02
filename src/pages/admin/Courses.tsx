@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Loader2, Edit, Trash2, X, User, Users, Calendar, Upload, Eye, Check } from 'lucide-react';
-import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE } from '../../lib/supabase';
 import type { Course, User as UserType } from '../../types';
 import { getMockCourses, setMockCourses, getMockUsers, setMockUsers } from '../../lib/mockData';
 

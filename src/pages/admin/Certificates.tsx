@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Award, Search, X, Loader2, CheckCircle, Download } from 'lucide-react';
-import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE } from '../../lib/supabase';
 import type { Certificate } from '../../types';
 import CertificateModal from '../../components/CertificateModal';
 

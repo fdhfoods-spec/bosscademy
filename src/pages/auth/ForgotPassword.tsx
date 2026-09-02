@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { KeyRound, AlertCircle, Loader2, ArrowLeft, Mail } from 'lucide-react';
-import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE } from '../../lib/supabase';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');

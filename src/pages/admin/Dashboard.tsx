@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, BookOpen, Award, TrendingUp, Loader2, DollarSign, 
@@ -319,7 +319,7 @@ export default function AdminDashboard() {
             {data.recentActivity.length === 0 ? (
               <p className="text-sm text-gray-500 font-medium text-center py-10">No recent activity found.</p>
             ) : (
-              data.recentActivity.map((item, idx) => (
+              data.recentActivity.map((item) => (
                 <div key={item.id} className="relative pl-6 border-l-2 border-gray-200 last:border-transparent">
                   {/* Timeline Dot */}
                   <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white ${

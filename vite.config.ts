@@ -90,11 +90,11 @@ const supabaseAdminPlugin = () => ({
             });
 
             if (!response.ok) {
-              const err = await response.json();
+              const err: any = await response.json();
               throw new Error(err.msg || err.message || 'Failed to generate link');
             }
 
-            const data = await response.json();
+            const data: any = await response.json();
             
             // The action_link contains the token
             const actionLink = data.action_link;
@@ -145,11 +145,11 @@ const supabaseAdminPlugin = () => ({
             });
 
             if (!response.ok) {
-              const err = await response.json();
+              const err: any = await response.json();
               throw new Error(err.msg || err.message || 'Failed to create user');
             }
 
-            const data = await response.json();
+            const data: any = await response.json();
             const authUserId = data.user?.user?.id || data.user?.id || data.id;
 
             if (profileData && authUserId) {
@@ -166,7 +166,7 @@ const supabaseAdminPlugin = () => ({
               });
               
               if (!profileRes.ok) {
-                const err = await profileRes.json().catch(()=>({}));
+                const err: any = await profileRes.json().catch(()=>({}));
                 // Cleanup orphaned auth user on profile failure
                 await fetch(`${process.env.VITE_SUPABASE_URL}/auth/v1/admin/users/${authUserId}`, {
                   method: 'DELETE',
@@ -266,7 +266,7 @@ const supabaseAdminPlugin = () => ({
             });
 
             if (!response.ok) {
-              const err = await response.json().catch(() => ({}));
+              const err: any = await response.json().catch(() => ({}));
               throw new Error(err.msg || err.message || 'Failed to delete user');
             }
 
@@ -315,7 +315,7 @@ const supabaseAdminPlugin = () => ({
                 body: JSON.stringify(profileData)
               });
               if (!profileRes.ok) {
-                const err = await profileRes.json().catch(() => ({}));
+                const err: any = await profileRes.json().catch(() => ({}));
                 throw new Error(err.message || 'Failed to update profile');
               }
             }
@@ -448,7 +448,7 @@ const supabaseAdminPlugin = () => ({
             });
             
             if (!response.ok) throw new Error('Failed to insert course');
-            const data = await response.json();
+            const data: any = await response.json();
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ success: true, course: data[0] }));
@@ -741,7 +741,7 @@ const paymentPlugin = () => ({
                 email_confirm: true
               })
             });
-            const authData = await authRes.json();
+            const authData: any = await authRes.json();
             if (!authRes.ok) throw new Error(authData.msg || authData.message || 'Failed to create auth user');
             const userId = authData.id;
 

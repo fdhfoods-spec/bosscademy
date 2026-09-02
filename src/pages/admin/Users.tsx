@@ -1,20 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Loader2, Plus, Edit3, Mail, Trash2, ChevronDown, User as UserIcon } from 'lucide-react';
-import { supabase, IS_MOCK_SUPABASE } from '../../lib/supabase';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key';
-
-// A secondary client that doesn't persist sessions, so we can sign up new users without logging out the Admin
-const adminAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-    storageKey: 'admin-auth-temp-key',
-  }
-});
+import { IS_MOCK_SUPABASE } from '../../lib/supabase';
 
 import type { User, Course } from '../../types';
 import { getMockUsers, setMockUsers, getMockCourses, syncStudentEnrollments } from '../../lib/mockData';
