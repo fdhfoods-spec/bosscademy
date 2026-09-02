@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { KeyRound, AlertCircle, Loader2, ArrowLeft, Mail } from 'lucide-react';
-import { IS_MOCK_SUPABASE } from '../../lib/supabase';
+import { IS_MOCK_SUPABASE, supabase } from '../../lib/supabase';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -39,44 +39,15 @@ export default function ForgotPassword() {
         return;
       }
 
-      // Live Supabase - Bypass Supabase rate limits with custom Admin API route
-      const linkRes = await fetch('/api/generate-reset-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+      // Live Supabase
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       
-      const linkData = await linkRes.json();
-      
-      if (!linkRes.ok) {
-        throw new Error(linkData.error || 'Failed to generate secure reset link');
+      if (resetError) {
+        throw new Error(resetError.message || 'Failed to generate secure reset link');
       }
 
-      const subject = 'Reset your password - Boss Academy';
-      const text = `HELLO,
-
-Someone has requested a password reset for your Boss Academy account.
-If this was you, please click the link below to set a new password:
-
-${linkData.action_link}
-
-Note: This link will expire in 24 hours.
-
-If you didn't request a password reset, you can safely ignore this email.
-
-CONFIDENTIAL & PROPRIETARY
-© 2026 BOSS ACADEMY. ALL RIGHTS RESERVED.`;
-
-      const emailRes = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: email, subject, text })
-      });
-      
-      if (!emailRes.ok) {
-        throw new Error('Failed to send email. Check your SMTP configuration.');
-      }
-      
       setSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to send reset email.');

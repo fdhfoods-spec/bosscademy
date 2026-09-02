@@ -148,10 +148,6 @@ CONFIDENTIAL & PROPRIETARY
 
     if (!IS_MOCK_SUPABASE) {
       try {
-        const firstName = newStudent.name.trim().split(' ')[0] || 'User';
-        const generatedPassword = `${firstName}@1001`;
-        const finalPassword = newStudent.password.trim() || generatedPassword;
-        
         const profileData = {
           name: newStudent.name,
           username: newStudent.email,
@@ -236,7 +232,6 @@ CONFIDENTIAL & PROPRIETARY
     if (!IS_MOCK_SUPABASE) {
       try {
         const email = newMentor.email;
-        
         const profileData = {
           name: newMentor.name,
           username: email,
