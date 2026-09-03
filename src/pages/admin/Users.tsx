@@ -187,19 +187,42 @@ CONFIDENTIAL & PROPRIETARY
           status: newStudent.status
         };
 
-        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
+        const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+        
+        const profileRes = await fetch(`${baseUrl}/rest/v1/profiles`, {
+          method: 'POST',
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(profileData)
+        });
 
-        if (createError) {
-          throw new Error(createError.message || 'Failed to create student profile');
+        if (!profileRes.ok) {
+          const err = await profileRes.json().catch(()=>({}));
+          throw new Error(err.message || err.details || 'Failed to create student profile');
         }
+
+        const [newUser] = await profileRes.json();
 
         // Add to enrollments if course selected
         if (newStudent.course && newUser) {
-          await supabaseAdmin.from('enrollments').insert([{
-            student_id: newUser.id,
-            course_id: newStudent.course,
-            status: 'active'
-          }]);
+          await fetch(`${baseUrl}/rest/v1/enrollments`, {
+            method: 'POST',
+            headers: {
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              student_id: newUser.id,
+              course_id: newStudent.course,
+              status: 'active'
+            })
+          });
         }
 
         showNotification('Student created successfully!', 'success');
