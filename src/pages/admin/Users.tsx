@@ -56,6 +56,7 @@ export default function AdminUsers() {
     name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [] as string[], status: 'active' as 'active' | 'inactive'
   });
   const [isSavingMentor, setIsSavingMentor] = useState(false);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
@@ -159,35 +160,27 @@ CONFIDENTIAL & PROPRIETARY
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = crypto.randomUUID();
-    const newProfile: User = {
-      id: crypto.randomUUID(), 
-      name: newStudent.name,
-      username: newStudent.email,
-      email: newStudent.email,
-      phone: newStudent.phone || undefined,
-      password: null,
-      reset_token: token,
-      course: newStudent.course,
-      assigned_courses: newStudent.course ? [newStudent.course] : [],
-      role: 'Student',
-      status: newStudent.status,
-      payment_status: 'verified',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+    if (isSavingStudent) return;
+    
+    // Validate required fields
+    if (!newStudent.name.trim() || !newStudent.email.trim()) {
+      showNotification('Name and Email are required.', 'error');
+      return;
+    }
 
+    setIsSavingStudent(true);
+    
     if (!IS_MOCK_SUPABASE) {
       try {
         // 1. Create Auth User via REST first to get an ID
-        const userId = await createAuthUser(newStudent.email, newStudent.password);
+        const userId = await createAuthUser(newStudent.email.trim(), newStudent.password);
 
         // 2. Insert into Profiles with the new ID
         const profileData = {
           id: userId,
-          name: newStudent.name,
-          username: newStudent.email,
-          email: newStudent.email,
+          name: newStudent.name.trim(),
+          username: newStudent.email.trim(),
+          email: newStudent.email.trim(),
           phone: newStudent.phone || null,
           course: newStudent.course || null,
           role: 'Student',
@@ -209,21 +202,41 @@ CONFIDENTIAL & PROPRIETARY
           }]);
         }
 
-        showNotification('Student created! Note: Email sending is currently disabled in UI.', 'success');
+        showNotification('Student created successfully!', 'success');
         
+        await fetchData();
         setIsAddModalOpen(false);
         setNewStudent({ name: '', email: '', phone: '', course: '', password: '', status: 'active' });
-        fetchData();
       } catch (err: any) {
-        showNotification(err.message, 'error');
+        showNotification(err.message || 'Failed to insert data into Supabase.', 'error');
+      } finally {
+        setIsSavingStudent(false);
       }
     } else {
+      // Mock logic
+      const token = crypto.randomUUID();
+      const newProfile = {
+        id: crypto.randomUUID(), 
+        name: newStudent.name,
+        username: newStudent.email,
+        email: newStudent.email,
+        phone: newStudent.phone || undefined,
+        password: null,
+        reset_token: token,
+        course: newStudent.course,
+        assigned_courses: newStudent.course ? [newStudent.course] : [],
+        role: 'Student' as any,
+        status: newStudent.status,
+        payment_status: 'verified' as any,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
       const currentUsers = getMockUsers();
       const updated = [newProfile, ...currentUsers];
       setMockUsers(updated);
       setUsers(updated);
       
-      // Auto enroll
       if (newProfile.assigned_courses?.length) {
         syncStudentEnrollments(newProfile.id, newProfile.assigned_courses);
       }
@@ -231,6 +244,7 @@ CONFIDENTIAL & PROPRIETARY
       setIsAddModalOpen(false);
       setNewStudent({ name: '', email: '', phone: '', course: '', password: '', status: 'active' });
       await sendRegistrationEmail(newProfile);
+      setIsSavingStudent(false);
     }
   };
 
