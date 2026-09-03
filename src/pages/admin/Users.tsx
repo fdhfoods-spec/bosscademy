@@ -187,42 +187,19 @@ CONFIDENTIAL & PROPRIETARY
           status: newStudent.status
         };
 
-        const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-        
-        const profileRes = await fetch(`${baseUrl}/rest/v1/profiles`, {
-          method: 'POST',
-          headers: {
-            'apikey': serviceRoleKey,
-            'Authorization': `Bearer ${serviceRoleKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify(profileData)
-        });
+        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
 
-        if (!profileRes.ok) {
-          const err = await profileRes.json().catch(()=>({}));
-          throw new Error(err.message || err.details || 'Failed to create student profile');
+        if (createError) {
+          throw new Error(createError.message || 'Failed to create student profile');
         }
-
-        const [newUser] = await profileRes.json();
 
         // Add to enrollments if course selected
         if (newStudent.course && newUser) {
-          await fetch(`${baseUrl}/rest/v1/enrollments`, {
-            method: 'POST',
-            headers: {
-              'apikey': serviceRoleKey,
-              'Authorization': `Bearer ${serviceRoleKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              student_id: newUser.id,
-              course_id: newStudent.course,
-              status: 'active'
-            })
-          });
+          await supabaseAdmin.from('enrollments').insert([{
+            student_id: newUser.id,
+            course_id: newStudent.course,
+            status: 'active'
+          }]);
         }
 
         showNotification('Student created successfully!', 'success');
@@ -296,6 +273,64 @@ CONFIDENTIAL & PROPRIETARY
       major_course: newMentor.major_course,
       assigned_courses: newMentor.assigned_courses,
       role: 'Mentor',
+      status: newMentor.status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (!IS_MOCK_SUPABASE) {
+      try {
+        const email = newMentor.email;
+        if (!email) throw new Error("Email is required");
+
+        // 1. Create Auth User via REST first to get an ID
+        const userId = await createAuthUser(email, newMentor.password);
+
+        // 2. Insert into Profiles with the new ID
+        const profileData = {
+          id: userId,
+          name: newMentor.name,
+          username: email,
+          email: email,
+          phone: newMentor.phone || null,
+          role: 'Mentor',
+          status: newMentor.status,
+          employee_id: newMentor.employee_id || null,
+          major_course: newMentor.major_course || null
+        };
+
+        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
+
+        if (createError) {
+          throw new Error(createError.message || 'Failed to create mentor profile');
+        }
+
+        // Assign courses if provided
+        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0 && newUser) {
+            for (const courseId of newMentor.assigned_courses) {
+                await supabaseAdmin.from('courses').update({ mentor_id: newUser.id }).eq('id', courseId);
+            }
+        }
+
+        showNotification('Mentor created! Note: Email sending is currently disabled in UI.', 'success');
+        
+        await fetchData();
+        setIsAddModalOpen(false);
+        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [], status: 'active' });
+      } catch (err: any) {
+        const errorMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Failed to connect to the database. Please check your network or Supabase configuration.');
+        if (errorMsg === 'Failed to fetch') {
+          showNotification('Network error (Failed to fetch). Please check your internet connection, AdBlocker, or Supabase URL configuration.', 'error');
+        } else {
+          showNotification(errorMsg, 'error');
+        }
+      } finally {
+        setIsSavingMentor(false);
+      }
+    } else {
+      try {
+        const currentUsers = getMockUsers();
+        const updated = [newProfile, ...currentUsers];
         setMockUsers(updated);
         setUsers(updated);
         setIsAddModalOpen(false);
