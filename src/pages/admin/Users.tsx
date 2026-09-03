@@ -296,25 +296,6 @@ CONFIDENTIAL & PROPRIETARY
       major_course: newMentor.major_course,
       assigned_courses: newMentor.assigned_courses,
       role: 'Mentor',
-      status: newMentor.status,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    if (!IS_MOCK_SUPABASE) {
-      try {
-        const email = newMentor.email;
-        if (!email) throw new Error("Email is required");
-        } else {
-          showNotification(errorMsg, 'error');
-        }
-      } finally {
-        setIsSavingMentor(false);
-      }
-    } else {
-      try {
-        const currentUsers = getMockUsers();
-        const updated = [newProfile, ...currentUsers];
         setMockUsers(updated);
         setUsers(updated);
         setIsAddModalOpen(false);
