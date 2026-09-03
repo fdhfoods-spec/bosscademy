@@ -316,29 +316,6 @@ CONFIDENTIAL & PROPRIETARY
           username: email,
           email: email,
           phone: newMentor.phone || null,
-          role: 'Mentor',
-          status: newMentor.status,
-          employee_id: newMentor.employee_id || null,
-          major_course: newMentor.major_course || null
-        };
-
-        const { data: newUser, error: createError } = await supabaseAdmin.from('profiles').insert([profileData]).select().single();
-
-        if (createError) {
-          throw new Error(createError.message || 'Failed to create mentor profile');
-        }
-
-        // Assign courses if provided
-        if (newMentor.assigned_courses && newMentor.assigned_courses.length > 0 && newUser) {
-            for (const courseId of newMentor.assigned_courses) {
-                await supabaseAdmin.from('courses').update({ mentor_id: newUser.id }).eq('id', courseId);
-            }
-        }
-
-        showNotification('Mentor created! Note: Email sending is currently disabled in UI.', 'success');
-        
-        await fetchData();
-        setIsAddModalOpen(false);
         setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [], status: 'active' });
       } catch (err: any) {
         const errorMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Failed to connect to the database. Please check your network or Supabase configuration.');
