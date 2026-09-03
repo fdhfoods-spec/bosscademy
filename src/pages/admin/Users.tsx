@@ -305,22 +305,6 @@ CONFIDENTIAL & PROPRIETARY
       try {
         const email = newMentor.email;
         if (!email) throw new Error("Email is required");
-
-        // 1. Create Auth User via REST first to get an ID
-        const userId = await createAuthUser(email, newMentor.password);
-
-        // 2. Insert into Profiles with the new ID
-        const profileData = {
-          id: userId,
-          name: newMentor.name,
-          username: email,
-          email: email,
-          phone: newMentor.phone || null,
-        setNewMentor({ name: '', email: '', phone: '', employee_id: '', major_course: '', password: '', assigned_courses: [], status: 'active' });
-      } catch (err: any) {
-        const errorMsg = err?.message || err?.error_description || (typeof err === 'string' ? err : 'Failed to connect to the database. Please check your network or Supabase configuration.');
-        if (errorMsg === 'Failed to fetch') {
-          showNotification('Network error (Failed to fetch). Please check your internet connection, AdBlocker, or Supabase URL configuration.', 'error');
         } else {
           showNotification(errorMsg, 'error');
         }
