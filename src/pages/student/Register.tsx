@@ -78,94 +78,58 @@ export default function Register() {
     const price = selectedCourse.price || 4999; // Default price if missing
 
     try {
-      // Direct Supabase Registration using REST API (Bypasses email confirmation and RLS on Vercel)
-      const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-      if (!serviceRoleKey || !baseUrl) {
-        throw new Error("Missing Supabase configuration. Please check your Vercel Environment Variables.");
-      }
-
-      const authRes = await fetch(`${baseUrl}/auth/v1/admin/users`, {
+      // Direct Supabase Registration using Vercel API (Bypasses email confirmation and RLS on Vercel)
+      const authRes = await fetch('/api/create-auth-user', {
         method: 'POST',
         headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           email: formData.email,
-          password: formData.password,
-          email_confirm: true
+          password: formData.password
         })
       });
 
       const authData = await authRes.json();
       if (!authRes.ok) {
-        throw new Error(authData.msg || authData.message || 'Email already registered or registration failed');
+        throw new Error(authData.error || authData.message || 'Email already registered or registration failed');
       }
       
       const userId = authData.id;
       if (!userId) throw new Error('Registration failed. Could not obtain User ID.');
 
       // Create Profile via REST to bypass RLS
-      const profileRes = await fetch(`${baseUrl}/rest/v1/profiles`, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: userId,
-          name: formData.name,
-          email: formData.email,
-          username: formData.email,
-          phone: formData.phone,
-          role: 'Student',
-          status: 'active'
-        })
-      });
-
-      if (!profileRes.ok) {
-        const pErr = await profileRes.json().catch(()=>({}));
-        throw new Error('Failed to create profile: ' + (pErr.message || 'Unknown error'));
-      }
+      const { error: profileError } = await supabase.from('profiles').insert([{
+        id: userId,
+        name: formData.name,
+        email: formData.email,
+        username: formData.email,
+        phone: formData.phone,
+        role: 'Student',
+        status: 'active'
+      }]);
+      if (profileError) throw new Error('Failed to create profile: ' + profileError.message);
 
       // Create mock payment record via REST to bypass RLS
       const paymentId = crypto.randomUUID();
-      await fetch(`${baseUrl}/rest/v1/payments`, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: paymentId,
-          student_id: userId,
-          course_id: selectedCourse.id,
-          amount: price,
-          currency: 'INR',
-          status: 'successful'
-        })
-      });
+      const { error: paymentError } = await supabase.from('payments').insert([{
+        id: paymentId,
+        student_id: userId,
+        course_id: selectedCourse.id,
+        amount: price,
+        currency: 'INR',
+        status: 'successful'
+      }]);
+      if (paymentError) throw new Error('Failed to create payment record: ' + paymentError.message);
 
       // Create Enrollment via REST to bypass RLS
-      await fetch(`${baseUrl}/rest/v1/enrollments`, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          student_id: userId,
-          course_id: selectedCourse.id,
-          payment_id: paymentId,
-          status: 'active'
-        })
-      });
+      const { error: enrollmentError } = await supabase.from('enrollments').insert([{
+        student_id: userId,
+        course_id: selectedCourse.id,
+        payment_id: paymentId,
+        status: 'active'
+      }]);
+      if (enrollmentError) throw new Error('Failed to create enrollment: ' + enrollmentError.message);
 
       setStep(4);
     } catch (err: any) {
