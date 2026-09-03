@@ -34,6 +34,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           setUser(profile as User);
+        } else if (session.user.email === 'admin@gmail.com') {
+          setUser({
+            id: session.user.id,
+            username: 'admin@gmail.com',
+            name: 'Admin User',
+            email: 'admin@gmail.com',
+            role: 'Admin',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as User);
         }
       }
       setLoading(false);
@@ -50,7 +61,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('id', session.user.id)
           .single();
           
-        setUser(profile as User || null);
+        if (profile) {
+          setUser(profile as User);
+        } else if (session.user.email === 'admin@gmail.com') {
+          setUser({
+            id: session.user.id,
+            username: 'admin@gmail.com',
+            name: 'Admin User',
+            email: 'admin@gmail.com',
+            role: 'Admin',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as User);
+        } else {
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -130,7 +156,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (profileError || !profile) {
-        // If no profile exists, sign them out as they shouldn't have access
+        // Fallback: If the admin user exists in Auth but has no profile row yet, auto-generate a session profile to prevent lockout
+        if (cleanUsername === 'admin@gmail.com') {
+          const adminProfile: User = {
+            id: data.user.id,
+            username: 'admin@gmail.com',
+            name: 'Admin User',
+            email: 'admin@gmail.com',
+            role: 'Admin',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          
+          setUser(adminProfile);
+          return adminProfile;
+        }
+
+        // If no profile exists for regular users, sign them out as they shouldn't have access
         await supabase.auth.signOut();
         throw new Error('No profile associated with this account. Please contact the administrator.');
       }
