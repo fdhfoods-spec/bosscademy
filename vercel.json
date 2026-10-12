@@ -1,8 +1,10 @@
+
 {
-  "rewrites": [
+  "redirects": [
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "https://bossglobal.edumilestones.com/",
+      "permanent": true
     }
   ]
 }
